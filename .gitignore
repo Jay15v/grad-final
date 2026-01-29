@@ -1,0 +1,24 @@
+# Node
+node_modules/
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML models & binaries
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Environment & secrets
+.env
+
+# OS
+.DS_Store
+Thumbs.db
