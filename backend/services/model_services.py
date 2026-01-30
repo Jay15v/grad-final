@@ -1,5 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from services.semantic_services import semantic_risk
+from services.semantic_services import semantic_risk
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_DIR = "models/bert_prompt_guard"
@@ -33,3 +35,13 @@ def bert_predict(prompt: str) -> float:
         probs = torch.softmax(outputs.logits, dim=1)
 
     return probs[0, 1].item()  # unsafe probability
+def analyze_prompt(prompt):
+    bert_score = bert_predict(prompt)
+    sem_score, sem_category, sem_similarity = semantic_risk(prompt)
+
+    return {
+        "bert_risk": bert_score,
+        "semantic_risk": sem_score,
+        "semantic_similarity": sem_similarity,
+        "semantic_category": sem_category
+    }

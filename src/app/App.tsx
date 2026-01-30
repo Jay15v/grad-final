@@ -63,12 +63,13 @@ export default function App() {
 
       const data = await res.json();
 
-      setResult({
-        decision: data.decision,
-        riskScore: Math.round(data.bert_risk * 100),
-        triggeredLayers: ['BERT Classifier'],
-        semanticSimilarity: Math.round(data.bert_risk * 100),
-      });
+     setResult({
+  decision: data.decision,
+  riskScore: Math.round(data.final_risk * 100),
+  triggeredLayers: data.triggered_layers,
+  semanticSimilarity: Math.round(data.semantic_similarity * 100),
+});
+
 
       setHasResult(true);
       showNotification('Analysis complete (real model)', 'success');
