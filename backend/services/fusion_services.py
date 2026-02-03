@@ -1,13 +1,13 @@
 from services.model_services import bert_predict
 from services.semantic_services import semantic_risk
+from services.rag_service import verify_claims_with_rag
 
-# 🔹 Structured reasoning imports
+# Structured reasoning imports
 from services.decomposition_service import decompose_prompt
 from services.reasoning_service import (
     generate_reasoning_from_steps,
     generate_claims_from_reasoning
 )
-
 
 # --------------------------------------------------
 # Global decision thresholds
@@ -18,14 +18,18 @@ HESITATE_THRESHOLD = 0.35
 
 def fuse_prompt(prompt: str):
     """
-    Domain-adaptive fusion engine + structured reasoning.
+    Domain-adaptive fusion engine with structured reasoning and RAG-ready claims.
 
     Pipeline:
-    - BERT → base statistical risk
-    - SBERT → semantic domain (context only)
-    - Domain-aware calibration
-    - Decision (ALLOW / HESITATE / BLOCK)
-    - IF ALLOW → Decomposition → Phi-3 reasoning → RAG claims
+    1) BERT → base statistical risk
+    2) SBERT → semantic domain (context only)
+    3) Domain-aware calibration
+    4) Decision (ALLOW / HESITATE / BLOCK)
+    5) IF ALLOW:
+        - Decomposition
+        - Phi-3 reasoning (prompt-grounded)
+        - Claim extraction (from reasoning)
+        - Optional RAG verification
     """
 
     # --------------------------------------------------
@@ -92,22 +96,29 @@ def fuse_prompt(prompt: str):
     }
 
     # --------------------------------------------------
-    # 7️⃣ 🔥 Structured reasoning (ONLY if ALLOW)
+    # 7️⃣ Structured reasoning (ONLY if ALLOW)
     # --------------------------------------------------
     if decision == "ALLOW":
-        # 7.1 Decompose prompt
+        # 7.1 Decompose the prompt
         decomposition = decompose_prompt(prompt)
         steps = decomposition.get("steps", [])
 
-        # 7.2 Phi-3 reasoning per step
-        reasoning = generate_reasoning_from_steps(steps,prompt)
+        # 7.2 Prompt-grounded Phi-3 reasoning per step
+        reasoning = generate_reasoning_from_steps(
+            steps=steps,
+            original_prompt=prompt
+        )
 
-        # 7.3 Claims extracted FROM reasoning
+        # 7.3 Claims extracted FROM reasoning (atomic facts)
         claims = generate_claims_from_reasoning(reasoning)
 
-        # 7.4 Attach structured outputs
+        # 7.4 Optional RAG verification (safe to disable)
+        rag_results = verify_claims_with_rag(claims)
+
+        # 7.5 Attach structured outputs
         response["decomposition"] = decomposition
         response["reasoning"] = reasoning
         response["claims"] = claims
+        response["rag_verification"] = rag_results
 
     return response
