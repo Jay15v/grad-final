@@ -1,3 +1,5 @@
+# services/semantic_services.py
+
 from sentence_transformers import SentenceTransformer, util
 import json
 import os
@@ -21,7 +23,12 @@ semantic_embeddings = {
 
 print("✅ Semantic service ready")
 
-def semantic_risk(prompt, threshold=0.55):
+
+def semantic_risk(prompt: str, threshold: float = 0.7):
+    """
+    Returns semantic context ONLY.
+    No risk scoring here.
+    """
     prompt_emb = sbert.encode(prompt, normalize_embeddings=True)
 
     best_score = 0.0
@@ -33,7 +40,8 @@ def semantic_risk(prompt, threshold=0.55):
             best_score = score
             best_category = category
 
+    # Weak similarity → ignore semantics completely
     if best_score < threshold:
-        return 0.0, None, best_score
+        return None, best_score
 
-    return best_score, best_category, best_score
+    return best_category, best_score
