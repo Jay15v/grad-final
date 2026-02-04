@@ -51,6 +51,20 @@ Rules:
         })
 
     return reasoning_results
+def normalize_claim_for_retrieval(claim: str) -> str:
+    claim = claim.strip()
+
+    # Encourage explicit physical phrasing
+    replacements = {
+        "due to": "because",
+        "appears": "appears",
+        "by air molecules": "by molecules in the atmosphere",
+    }
+
+    for k, v in replacements.items():
+        claim = claim.replace(k, v)
+
+    return claim
 
 
 def generate_claims_from_reasoning(reasoning: list) -> list:
@@ -75,8 +89,9 @@ def generate_claims_from_reasoning(reasoning: list) -> list:
                 continue
 
             claims.append({
-                "claim": sentence,
-                "source_step_id": step_id
-            })
+    "claim": normalize_claim_for_retrieval(sentence),
+    "source_step_id": step_id
+})
+
 
     return claims

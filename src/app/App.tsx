@@ -1,17 +1,18 @@
-import { useState } from 'react';
-import { Header } from './components/Header';
-import { Footer } from './components/Footer';
-import { HeroSection } from './components/HeroSection';
-import { DefensePipeline } from './components/DefensePipeline';
-import { DecisionOutput } from './components/DecisionOutput';
-import { ActionControls } from './components/ActionControls';
-import { NotificationToast } from './components/NotificationToast';
-import { DecompositionView } from './components/DecompositionView';
-import { motion } from 'motion/react';
-
-type Decision = 'ALLOW' | 'BLOCK' | 'HESITATE';
+import { useState } from "react";
+import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
+import { HeroSection } from "./components/HeroSection";
+import { DefensePipeline } from "./components/DefensePipeline";
+import { DecisionOutput } from "./components/DecisionOutput";
+import { ActionControls } from "./components/ActionControls";
+import { NotificationToast } from "./components/NotificationToast";
+import { DecompositionView } from "./components/DecompositionView";
+import { motion } from "motion/react";
+import { RagEvidence } from "./types/rag";
 
 /* ---------------- Types ---------------- */
+
+type Decision = "ALLOW" | "BLOCK" | "HESITATE";
 
 interface DecompositionStep {
   id: number;
@@ -22,7 +23,9 @@ interface DecompositionStep {
 interface Decomposition {
   steps: DecompositionStep[];
   constraints: Record<string, any>;
-  quality: Record<string, number>;
+  quality: {
+    score: number;
+  };
 }
 
 interface Claim {
@@ -37,6 +40,7 @@ interface AnalysisResult {
   semanticSimilarity: number;
   decomposition?: Decomposition;
   claims?: Claim[];
+  ragResults?: RagEvidence[];
 }
 
 /* ---------------- App ---------------- */
@@ -51,45 +55,51 @@ export default function App() {
 
   const [notification, setNotification] = useState({
     show: false,
-    message: '',
-    type: 'info' as 'info' | 'success' | 'error',
+    message: "",
+    type: "info" as "info" | "success" | "error",
   });
 
-  /* ---------------- Notification helper ---------------- */
+  /* ---------------- Notifications ---------------- */
+
   const showNotification = (
     message: string,
-    type: 'info' | 'success' | 'error'
+    type: "info" | "success" | "error"
   ) => {
     setNotification({ show: true, message, type });
-    setTimeout(() => {
-      setNotification({ show: false, message: '', type: 'info' });
-    }, 3000);
+    setTimeout(
+      () =>
+        setNotification({
+          show: false,
+          message: "",
+          type: "info",
+        }),
+      3000
+    );
   };
 
-  /* ---------------- Analyze prompt ---------------- */
+  /* ---------------- Analyze ---------------- */
+
   const handleAnalyze = async (prompt: string) => {
     setIsAnalyzing(true);
     setHasResult(false);
     setShowBreakdown(false);
     setCurrentStep(0);
 
-    // animate pipeline
     [0, 1, 2, 3].forEach((step, index) => {
       setTimeout(() => setCurrentStep(step), (index + 1) * 700);
     });
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("http://127.0.0.1:5000/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
 
-      if (!res.ok) throw new Error('Backend error');
+      if (!res.ok) throw new Error("Backend error");
 
       const data = await res.json();
 
-      /* ✅ SAFE mapping aligned with fusion_services.py */
       const baseResult: AnalysisResult = {
         decision: data.status as Decision,
         riskScore: Math.round(
@@ -101,40 +111,37 @@ export default function App() {
         ),
       };
 
-      if (data.status === 'ALLOW') {
+      if (data.status === "ALLOW") {
         setResult({
           ...baseResult,
           decomposition: data.decomposition,
-          claims: data.claims || [],
+          claims: data.claims ?? [],
+          ragResults: data.rag_verification ?? [],
         });
       } else {
         setResult(baseResult);
       }
 
       setHasResult(true);
-      showNotification('Analysis complete', 'success');
+      showNotification("Analysis complete", "success");
     } catch (err) {
       console.error(err);
-      showNotification('Backend error (check console)', 'error');
+      showNotification("Backend error (check console)", "error");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  /* ---------------- View breakdown ---------------- */
-  const handleViewBreakdown = () => {
-    if (!result) return;
+  /* ---------------- View Breakdown ---------------- */
 
-    if (result.decision !== 'ALLOW') {
-      showNotification('This prompt was not allowed', 'info');
+  const handleViewBreakdown = () => {
+    if (!result || result.decision !== "ALLOW") {
+      showNotification("This prompt was not allowed", "info");
       return;
     }
 
     if (!result.decomposition) {
-      showNotification(
-        'This prompt is allowed, but no decomposition was generated',
-        'info'
-      );
+      showNotification("No decomposition available", "info");
       return;
     }
 
@@ -142,19 +149,21 @@ export default function App() {
   };
 
   /* ---------------- Reset ---------------- */
+
   const handleAnalyzeAnother = () => {
     setHasResult(false);
     setResult(null);
     setCurrentStep(0);
     setShowBreakdown(false);
-    showNotification('Ready for new analysis', 'info');
+    showNotification("Ready for new analysis", "info");
   };
 
   const handleExport = () => {
-    showNotification('Analysis exported successfully', 'success');
+    showNotification("Analysis exported successfully", "success");
   };
 
   /* ---------------- Render ---------------- */
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <Header />
@@ -186,10 +195,12 @@ export default function App() {
         )}
 
         {showBreakdown && result?.decomposition && (
-          <DecompositionView
-            decomposition={result.decomposition}
-            claims={result.claims || []}
-          />
+         <DecompositionView
+  decomposition={result.decomposition}
+  claims={result.claims || []}
+  ragResults={result.ragResults || []}
+/>
+
         )}
 
         {hasResult && (
