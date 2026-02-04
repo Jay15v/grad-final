@@ -119,6 +119,5 @@ def fuse_prompt(prompt: str):
         response["decomposition"] = decomposition
         response["reasoning"] = reasoning
         response["claims"] = claims
-        response["rag_verification"] = rag_results
-
+        response["rag_results"] = rag_results  
     return response
