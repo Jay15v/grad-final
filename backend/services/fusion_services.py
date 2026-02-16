@@ -1,36 +1,22 @@
+import os
+import traceback
+
 from services.model_services import bert_predict
 from services.semantic_services import semantic_risk
-from services.rag_service import verify_claims_with_rag
-
-# Structured reasoning imports
+from services.rag_service import verify_claims_with_rag_google
 from services.decomposition_service import decompose_prompt
 from services.reasoning_service import (
     generate_reasoning_from_steps,
     generate_claims_from_reasoning
 )
 
-# --------------------------------------------------
-# Global decision thresholds
-# --------------------------------------------------
+RAG_ENABLED = bool(os.getenv("GOOGLE_CSE_API_KEY") and os.getenv("GOOGLE_CSE_ID"))
+
 BLOCK_THRESHOLD = 0.60
 HESITATE_THRESHOLD = 0.35
 
 
 def fuse_prompt(prompt: str):
-    """
-    Domain-adaptive fusion engine with structured reasoning and RAG-ready claims.
-
-    Pipeline:
-    1) BERT → base statistical risk
-    2) SBERT → semantic domain (context only)
-    3) Domain-aware calibration
-    4) Decision (ALLOW / HESITATE / BLOCK)
-    5) IF ALLOW:
-        - Decomposition
-        - Phi-3 reasoning (prompt-grounded)
-        - Claim extraction (from reasoning)
-        - Optional RAG verification
-    """
 
     # --------------------------------------------------
     # 1️⃣ Base risk from BERT
@@ -39,7 +25,7 @@ def fuse_prompt(prompt: str):
     final_risk = bert_risk
 
     # --------------------------------------------------
-    # 2️⃣ Semantic domain detection (context only)
+    # 2️⃣ Semantic domain detection
     # --------------------------------------------------
     semantic_domain, semantic_similarity = semantic_risk(prompt)
 
@@ -58,9 +44,6 @@ def fuse_prompt(prompt: str):
     elif semantic_domain == "virtualization_hypotheticals":
         final_risk = bert_risk * 0.6
 
-    else:
-        final_risk = bert_risk
-
     # --------------------------------------------------
     # 4️⃣ Final decision
     # --------------------------------------------------
@@ -72,17 +55,7 @@ def fuse_prompt(prompt: str):
         decision = "ALLOW"
 
     # --------------------------------------------------
-    # 5️⃣ Explainability layers
-    # --------------------------------------------------
-    triggered_layers = ["BERT Risk Estimation"]
-
-    if semantic_domain:
-        triggered_layers.append("Semantic Domain Adaptation")
-
-    triggered_layers.append("Decision Policy")
-
-    # --------------------------------------------------
-    # 6️⃣ Base response (ALWAYS returned)
+    # 5️⃣ Base response
     # --------------------------------------------------
     response = {
         "status": decision,
@@ -91,33 +64,60 @@ def fuse_prompt(prompt: str):
             "semantic_domain": semantic_domain,
             "semantic_similarity": round(semantic_similarity, 3),
             "final_risk": round(final_risk, 3),
-            "triggered_layers": triggered_layers
         }
     }
 
     # --------------------------------------------------
-    # 7️⃣ Structured reasoning (ONLY if ALLOW)
+    # 6️⃣ Structured reasoning ONLY if ALLOW
     # --------------------------------------------------
     if decision == "ALLOW":
-        # 7.1 Decompose the prompt
-        decomposition = decompose_prompt(prompt)
-        steps = decomposition.get("steps", [])
 
-        # 7.2 Prompt-grounded Phi-3 reasoning per step
-        reasoning = generate_reasoning_from_steps(
-            steps=steps,
-            original_prompt=prompt
-        )
+        decomposition = {"steps": [], "constraints": {}, "quality": {"score": 0.0}}
+        reasoning = []   # ✅ must be list, not {}
+        claims = []
 
-        # 7.3 Claims extracted FROM reasoning (atomic facts)
-        claims = generate_claims_from_reasoning(reasoning)
+        try:
+            decomposition = decompose_prompt(prompt)
+            steps = decomposition.get("steps", [])
 
-        # 7.4 Optional RAG verification (safe to disable)
-        rag_results = verify_claims_with_rag(claims)
+            reasoning = generate_reasoning_from_steps(
+                steps=steps,
+                original_prompt=prompt
+            )
 
-        # 7.5 Attach structured outputs
+            # Debug (helps you confirm)
+            print("DEBUG: steps =", len(steps))
+            print("DEBUG: reasoning items =", len(reasoning))
+            empty_reasonings = sum(1 for x in reasoning if not (x.get("reasoning") or "").strip())
+            print("DEBUG: empty reasoning items =", empty_reasonings)
+
+            claims = generate_claims_from_reasoning(reasoning) or []
+            print("DEBUG: claims =", len(claims))
+
+        except Exception as e:
+            print("⚠️ Decomposition/Reasoning error:", str(e))
+            traceback.print_exc()
+
+        rag_results = {
+            "results": [],
+            "rag_eval": {"total_steps": 0, "hits": 0, "misses": 0, "hit_rate": 0.0}
+        }
+
+        try:
+            if claims and RAG_ENABLED:
+                rag_results = verify_claims_with_rag_google(claims, k=5, refresh_web=True) or rag_results
+            else:
+                if not RAG_ENABLED:
+                    print("⚠️ RAG_DISABLED: Missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ID")
+                if not claims:
+                    print("⚠️ NO_CLAIMS: Skipping RAG because claims list is empty")
+        except Exception as e:
+            print("⚠️ RAG error:", str(e))
+            traceback.print_exc()
+
         response["decomposition"] = decomposition
         response["reasoning"] = reasoning
         response["claims"] = claims
-        response["rag_results"] = rag_results  
+        response["rag_verification"] = rag_results
+
     return response

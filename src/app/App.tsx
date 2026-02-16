@@ -40,7 +40,16 @@ interface AnalysisResult {
   semanticSimilarity: number;
   decomposition?: Decomposition;
   claims?: Claim[];
-  ragResults?: RagEvidence[];
+  ragVerification?: {
+  results: RagEvidence[];
+  rag_eval: {
+    total_steps: number;
+    hits: number;
+    misses: number;
+    hit_rate: number;
+  };
+};
+
 }
 
 /* ---------------- App ---------------- */
@@ -90,7 +99,7 @@ export default function App() {
     });
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/analyze", {
+      const res = await fetch("http://localhost:5000/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
@@ -116,7 +125,7 @@ export default function App() {
           ...baseResult,
           decomposition: data.decomposition,
           claims: data.claims ?? [],
-          ragResults: data.rag_verification ?? [],
+          ragVerification: data.rag_verification ?? { results: [], rag_eval: { total_steps: 0, hits: 0, misses: 0, hit_rate: 0 } },
         });
       } else {
         setResult(baseResult);
@@ -196,10 +205,12 @@ export default function App() {
 
         {showBreakdown && result?.decomposition && (
          <DecompositionView
-  decomposition={result.decomposition}
-  claims={result.claims || []}
-  ragResults={result.ragResults || []}
-/>
+           decomposition={result.decomposition}
+           claims={result.claims || []}
+           ragResults={result.ragVerification?.results || []}
+           ragEval={result.ragVerification?.rag_eval}
+         />
+
 
         )}
 
