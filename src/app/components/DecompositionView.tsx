@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { RagEvidence } from "../types/rag";
 
 interface DecompositionStep {
   id: number;
@@ -12,7 +13,7 @@ interface Claim {
 }
 
 interface RagEvidenceChunk {
-  id: string;
+  id?: string;
   source: string;
   title: string;
   url: string;

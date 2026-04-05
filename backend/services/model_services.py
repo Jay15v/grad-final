@@ -1,10 +1,16 @@
-# services/model_services.py
-
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_DIR = "models/bert_prompt_guard"
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(BASE_DIR, "models", "bert_prompt_guard")
+
+print("Loading model from:", MODEL_DIR)
+
+if not os.path.exists(MODEL_DIR):
+    raise FileNotFoundError(f"Model directory not found: {MODEL_DIR}")
 
 print("🔄 Loading tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained(
