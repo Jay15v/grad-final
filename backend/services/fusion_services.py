@@ -4,6 +4,7 @@ import traceback
 from services.model_services import bert_predict
 from services.semantic_services import semantic_risk
 from services.rag_service import verify_claims_with_rag_google
+from services.verification_service import verify_rag_output
 from services.decomposition_service import decompose_prompt
 from services.reasoning_service import (
     generate_reasoning_from_steps,
@@ -102,6 +103,17 @@ def fuse_prompt(prompt: str):
             "results": [],
             "rag_eval": {"total_steps": 0, "hits": 0, "misses": 0, "hit_rate": 0.0}
         }
+        verification_results = {
+            "role3_results": [],
+            "final_control": {
+                "final_decision": "ALLOWED",
+                "counts": {
+                    "supported": 0,
+                    "uncertain": 0,
+                    "unsupported": 0
+                }
+            }
+        }
 
         try:
             if claims and RAG_ENABLED:
@@ -115,9 +127,21 @@ def fuse_prompt(prompt: str):
             print("⚠️ RAG error:", str(e))
             traceback.print_exc()
 
+        try:
+            if rag_results.get("results"):
+                verification_results = verify_rag_output(rag_results) or verification_results
+            else:
+                print("⚠️ NO_RAG_RESULTS: Skipping verification because RAG returned no results")
+        except Exception as e:
+            print("⚠️ Verification error:", str(e))
+            traceback.print_exc()
+
         response["decomposition"] = decomposition
         response["reasoning"] = reasoning
         response["claims"] = claims
         response["rag_verification"] = rag_results
+        response["verification"] = verification_results
+        response["verified_status"] = verification_results["final_control"]["final_decision"]
 
     return response
+
