@@ -2,7 +2,7 @@ import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "phi3"
+MODEL_NAME = "qwen2:0.5b"
 
 
 def call_ollama_chat(message: str, history: list = None) -> str:
@@ -40,16 +40,19 @@ def call_ollama_chat(message: str, history: list = None) -> str:
     }
 
     try:
+        print(f"[OLLAMA] Sending request to {OLLAMA_CHAT_URL} with model={MODEL_NAME}")
         resp = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=120)
+        print(f"[OLLAMA] Response status: {resp.status_code}")
+        print(f"[OLLAMA] Response body: {resp.text[:500]}")
         resp.raise_for_status()
         data = resp.json()
         content = data.get("message", {}).get("content", "")
         return content if isinstance(content, str) else str(content)
     except requests.exceptions.RequestException as e:
-        print("OLLAMA CHAT REQUEST ERROR:", str(e))
+        print(f"[OLLAMA] REQUEST ERROR: {type(e).__name__}: {e}")
         return "I'm unable to respond right now."
     except ValueError as e:
-        print("OLLAMA CHAT JSON ERROR:", str(e))
+        print(f"[OLLAMA] JSON ERROR: {e}")
         return "I'm unable to respond right now."
 
 
@@ -59,7 +62,7 @@ def call_phi3(prompt: str) -> str:
     Always returns a string (never None).
     """
     payload = {
-    "model": "phi3",
+    "model": MODEL_NAME,
     "prompt": prompt,
     "stream": False,
     "options": {

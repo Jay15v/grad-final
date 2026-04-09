@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
+import 'models/user_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'screens/chat_screen.dart';
 import 'screens/analyzer_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/admin_dashboard.dart';
+import 'screens/parent_home_screen.dart';
 import 'widgets/app_colors.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const AegisMindApp());
 }
 
@@ -28,10 +38,217 @@ class AegisMindApp extends StatelessWidget {
         ),
         dividerColor: AppColors.border.withOpacity(0.4),
       ),
-      home: const HomeShell(),
+      home: const AuthGate(),
     );
   }
 }
+
+// ─── Auth Gate ───────────────────────────────────────────────────────────────
+// Listens to Firebase auth state and routes to Login or the role-based screen.
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _SplashScreen();
+        }
+        if (snapshot.hasData && snapshot.data != null) {
+          return _RoleRouter(uid: snapshot.data!.uid);
+        }
+        return const LoginScreen();
+      },
+    );
+  }
+}
+
+// ─── Role Router ─────────────────────────────────────────────────────────────
+// Reads the user's Firestore role and navigates to the correct screen.
+
+class _RoleRouter extends StatefulWidget {
+  final String uid;
+  const _RoleRouter({required this.uid});
+
+  @override
+  State<_RoleRouter> createState() => _RoleRouterState();
+}
+
+class _RoleRouterState extends State<_RoleRouter> {
+  late Future<UserModel?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadUser();
+  }
+
+  Future<UserModel?> _loadUser() async {
+    // Read raw Firestore doc without converter to avoid any serialization issues
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.uid)
+        .get()
+        .timeout(const Duration(seconds: 15));
+    if (!doc.exists) return null;
+    final data = doc.data()!;
+    return UserModel(
+      uid: doc.id,
+      email: data['email'] as String? ?? '',
+      name: data['name'] as String? ?? '',
+      role: (data['role'] as String? ?? 'child').toLowerCase(),
+      parentId: data['parentId'] as String?,
+      createdAt: (data['createdAt'] != null)
+          ? (data['createdAt'] as dynamic).toDate()
+          : DateTime.now(),
+    );
+  }
+
+  void _retry() => setState(() => _future = _loadUser());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<UserModel?>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _SplashScreen();
+        }
+
+        if (snapshot.hasError) {
+          return _ErrorScreen(
+            message: 'Could not load profile:\n${snapshot.error}',
+            onRetry: _retry,
+            onSignOut: () => FirebaseAuth.instance.signOut(),
+          );
+        }
+
+        final user = snapshot.data;
+        if (user == null) {
+          // No Firestore record — sign out after frame
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => FirebaseAuth.instance.signOut(),
+          );
+          return const _SplashScreen();
+        }
+
+        switch (user.role) {
+          case 'admin':
+            return const AdminDashboard();
+          case 'parent':
+            return const ParentHomeScreen();
+          case 'child':
+          default:
+            return const HomeShell();
+        }
+      },
+    );
+  }
+}
+
+class _ErrorScreen extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onSignOut;
+
+  const _ErrorScreen({
+    required this.message,
+    required this.onRetry,
+    required this.onSignOut,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: AppColors.danger, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                ),
+                child: const Text('Retry'),
+              ),
+              TextButton(
+                onPressed: onSignOut,
+                child: Text('Sign out',
+                    style: TextStyle(color: AppColors.textMuted)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Splash Screen ───────────────────────────────────────────────────────────
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Container(
+        decoration: BoxDecoration(gradient: AppColors.bgGradient),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  gradient: AppColors.accentGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accent.withOpacity(0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'A',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const CircularProgressIndicator(strokeWidth: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Home Shell (child / default users) ──────────────────────────────────────
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});

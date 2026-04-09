@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "293662858269",
+    "project_id": "aegismind-17a11",
+    "storage_bucket": "aegismind-17a11.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:293662858269:android:f4a4b276b23d12517fbaf4",
+        "android_client_info": {
+          "package_name": "com.example.aegismind"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDxtYU5I2enge2xrjE7ikmd0vZgvRWp2QY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
