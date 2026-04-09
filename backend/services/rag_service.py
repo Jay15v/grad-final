@@ -12,15 +12,6 @@ from sentence_transformers import SentenceTransformer
 
 
 # ==================================================
-# 0) ENV (DO NOT hardcode keys in production)
-# ==================================================
-GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
-GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "").strip()
-
-RAG_ENABLED = bool(GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID)
-
-
-# ==================================================
 # 1) Embedder + FAISS
 # ==================================================
 embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -29,7 +20,7 @@ embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 class LocalFaissStore:
     def __init__(self, dim: int):
         self.dim = dim
-        self.index = faiss.IndexFlatIP(dim)  # cosine after normalization
+        self.index = faiss.IndexFlatIP(dim)
         self.docs = []
         self._id_set = set()
 
@@ -72,7 +63,6 @@ class LocalFaissStore:
 
 store = LocalFaissStore(dim=embedder.get_sentence_embedding_dimension())
 
-# Prevent re-ingesting the same claim repeatedly (simple cache)
 _ingest_cache = set()
 
 
@@ -80,24 +70,31 @@ _ingest_cache = set()
 # 2) Google Search + Fetch
 # ==================================================
 def google_cse_search(query: str, num: int = 5):
-    if not RAG_ENABLED:
+    api_key = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
+    cse_id = os.getenv("GOOGLE_CSE_ID", "").strip()
+
+    if not api_key or not cse_id:
+        print("RAG disabled: missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ID")
         return []
 
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
-        "key": GOOGLE_CSE_API_KEY,
-        "cx": GOOGLE_CSE_ID,
-        "q": query[:128],     # important: avoid super long queries
+        "key": api_key,
+        "cx": cse_id,
+        "q": query[:128],
         "num": num,
         "safe": "active",
     }
 
+    print(f"RAG searching: {query[:60]}...")
     r = requests.get(url, params=params, timeout=20)
     if r.status_code == 429:
-        return []  # rate limited
+        print("RAG: rate limited (429)")
+        return []
     r.raise_for_status()
 
     items = (r.json().get("items") or [])
+    print(f"RAG: got {len(items)} results")
     out = []
     for it in items:
         out.append({
@@ -145,7 +142,11 @@ def stable_id(*parts):
 # 3) Ingest evidence for ONE claim
 # ==================================================
 def ingest_web_evidence_for_claim(claim: str, num_results: int = 5, chunks_per_page: int = 6):
-    if not RAG_ENABLED:
+    api_key = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
+    cse_id = os.getenv("GOOGLE_CSE_ID", "").strip()
+    rag_enabled = bool(api_key and cse_id)
+
+    if not rag_enabled:
         return {"search_results": [], "added_chunks": 0, "rag_enabled": False}
 
     cache_key = stable_id(claim)
@@ -164,29 +165,40 @@ def ingest_web_evidence_for_claim(claim: str, num_results: int = 5, chunks_per_p
 
         title = r.get("title", "")
         domain = r.get("displayLink", "") or urlparse(url).netloc
-
-        try:
-            page_text = fetch_page_text(url)
-        except Exception:
-            continue
-
-        chunks = chunk_text(page_text)[:chunks_per_page]
-        for ci, ch in enumerate(chunks):
-            doc_id = stable_id(url, str(ci), ch[:80])
+# Use snippet directly (always available, no blocking)
+        snippet = r.get("snippet", "")
+        if snippet:
+            doc_id = stable_id(url, "snippet", snippet[:80])
             new_docs.append({
                 "id": f"web_{doc_id}",
-                "text": ch,
+                "text": snippet,
                 "source": domain,
                 "url": url,
                 "title": title,
             })
 
+        # Also try full page fetch
+        try:
+            page_text = fetch_page_text(url)
+            chunks = chunk_text(page_text)[:chunks_per_page]
+            for ci, ch in enumerate(chunks):
+                doc_id = stable_id(url, str(ci), ch[:80])
+                new_docs.append({
+                    "id": f"web_{doc_id}",
+                    "text": ch,
+                    "source": domain,
+                    "url": url,
+                    "title": title,
+                })
+        except Exception:
+            continue
+        
     added = store.add_many(new_docs)
     return {"search_results": results, "added_chunks": added, "rag_enabled": True}
 
 
 # ==================================================
-# 4) Similarity + Coverage scoring (your logic)
+# 4) Similarity + Coverage scoring
 # ==================================================
 STOPWORDS = set("""
 a an the and or but if then else this that these those is are was were be been being
@@ -218,8 +230,8 @@ def coverage_score(claim: str, evidence: str) -> float:
 def compare_claim_to_candidates(
     claim: str,
     candidates: list,
-    sim_threshold: float = 0.30,
-    cov_threshold: float = 0.15
+    sim_threshold: float = 0.15,
+    cov_threshold: float = 0.10
 ):
     filtered = [c for c in candidates if c.get("similarity", 0.0) >= sim_threshold]
     if not filtered:
@@ -233,11 +245,11 @@ def compare_claim_to_candidates(
     unique_candidates = []
 
     for c in filtered:
-       url = c.get("url")
-       if url in seen_urls:
-          continue
-       seen_urls.add(url)
-       unique_candidates.append(c)
+        url = c.get("url")
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        unique_candidates.append(c)
 
     filtered = unique_candidates
     best = filtered[0]
@@ -248,12 +260,9 @@ def compare_claim_to_candidates(
         return {"verdict": "SUPPORTED_WEAK", "best": best, "candidates": filtered}
 
     return {"verdict": "WEAK", "best": best, "candidates": filtered}
+
+
 def compute_hit_miss_stats(results: list) -> dict:
-    """
-    Role-2 retrieval evaluation:
-    - Hit: verdict == SUPPORTED_WEAK (at least one chunk passed similarity + coverage threshold)
-    - Miss: otherwise
-    """
     total = len(results)
     hits = sum(1 for r in results if r.get("verdict") == "SUPPORTED_WEAK")
     misses = total - hits
@@ -265,7 +274,6 @@ def compute_hit_miss_stats(results: list) -> dict:
         "misses": misses,
         "hit_rate": hit_rate
     }
-
 
 
 # ==================================================
@@ -281,26 +289,25 @@ def verify_claims_with_rag_google(claims, k=5, refresh_web=True):
     """
     results = []
 
-    # We fetch more than k so threshold filtering won't shrink results too much
-    oversample_k = max(20, k * 4)  # e.g., k=5 -> 20
+    oversample_k = max(20, k * 4)
 
     for c in claims:
         claim_text = c["claim"]
         step_id = c.get("source_step_id", -1)
 
-        meta = {"search_results": [], "added_chunks": 0, "rag_enabled": RAG_ENABLED}
+        api_key = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
+        cse_id = os.getenv("GOOGLE_CSE_ID", "").strip()
+        rag_enabled = bool(api_key and cse_id)
 
-        # 1) optionally ingest web evidence
+        meta = {"search_results": [], "added_chunks": 0, "rag_enabled": rag_enabled}
+
         if refresh_web:
             meta = ingest_web_evidence_for_claim(claim_text, num_results=5, chunks_per_page=6)
 
-        # 2) retrieve MORE candidates than k
         raw_candidates = store.search(claim_text, k=oversample_k)
 
-        # 3) score & verdict (filters + ranks)
         comp = compare_claim_to_candidates(claim_text, raw_candidates)
 
-        # 4) keep only top-k for UI
         topk = (comp["candidates"] or [])[:k]
 
         results.append({

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { HeroSection } from "./components/HeroSection";
 import { DefensePipeline } from "./components/DefensePipeline";
@@ -7,12 +6,17 @@ import { DecisionOutput } from "./components/DecisionOutput";
 import { ActionControls } from "./components/ActionControls";
 import { NotificationToast } from "./components/NotificationToast";
 import { DecompositionView } from "./components/DecompositionView";
+import { ChatPanel } from "./components/ChatPanel";
+import { PipelineDashboard } from "./components/PipelineDashboard";
 import { motion } from "motion/react";
 import { RagEvidence } from "./types/rag";
+import type { DefenseMeta } from "./components/ChatPanel";
+import { MessageSquare, ScanSearch } from "lucide-react";
 
 /* ---------------- Types ---------------- */
 
 type Decision = "ALLOW" | "BLOCK" | "HESITATE";
+type AppMode = "chat" | "analyzer";
 
 interface DecompositionStep {
   id: number;
@@ -46,11 +50,17 @@ interface AnalysisResult {
 /* ---------------- App ---------------- */
 
 export default function App() {
+  const [mode, setMode] = useState<AppMode>("chat");
+
+  // ---- Chat mode state ----
+  const [lastPipelineId, setLastPipelineId] = useState<string | null>(null);
+  const [lastDefenseMeta, setLastDefenseMeta] = useState<DefenseMeta | null>(null);
+
+  // ---- Analyzer mode state ----
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showBreakdown, setShowBreakdown] = useState(false);
-
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const [notification, setNotification] = useState({
@@ -61,23 +71,12 @@ export default function App() {
 
   /* ---------------- Notifications ---------------- */
 
-  const showNotification = (
-    message: string,
-    type: "info" | "success" | "error"
-  ) => {
+  const showNotification = (message: string, type: "info" | "success" | "error") => {
     setNotification({ show: true, message, type });
-    setTimeout(
-      () =>
-        setNotification({
-          show: false,
-          message: "",
-          type: "info",
-        }),
-      3000
-    );
+    setTimeout(() => setNotification({ show: false, message: "", type: "info" }), 3000);
   };
 
-  /* ---------------- Analyze ---------------- */
+  /* ---------------- Analyzer handlers ---------------- */
 
   const handleAnalyze = async (prompt: string) => {
     setIsAnalyzing(true);
@@ -102,13 +101,9 @@ export default function App() {
 
       const baseResult: AnalysisResult = {
         decision: data.status as Decision,
-        riskScore: Math.round(
-          (data.decision_meta?.final_risk || 0) * 100
-        ),
+        riskScore: Math.round((data.decision_meta?.final_risk || 0) * 100),
         triggeredLayers: data.decision_meta?.triggered_layers || [],
-        semanticSimilarity: Math.round(
-          (data.decision_meta?.semantic_similarity || 0) * 100
-        ),
+        semanticSimilarity: Math.round((data.decision_meta?.semantic_similarity || 0) * 100),
       };
 
       if (data.status === "ALLOW") {
@@ -116,7 +111,7 @@ export default function App() {
           ...baseResult,
           decomposition: data.decomposition,
           claims: data.claims ?? [],
-          ragResults: data.rag_verification ?? [],
+          ragResults: data.rag_verification?.results ?? [],
         });
       } else {
         setResult(baseResult);
@@ -132,23 +127,17 @@ export default function App() {
     }
   };
 
-  /* ---------------- View Breakdown ---------------- */
-
   const handleViewBreakdown = () => {
     if (!result || result.decision !== "ALLOW") {
       showNotification("This prompt was not allowed", "info");
       return;
     }
-
     if (!result.decomposition) {
       showNotification("No decomposition available", "info");
       return;
     }
-
     setShowBreakdown(true);
   };
-
-  /* ---------------- Reset ---------------- */
 
   const handleAnalyzeAnother = () => {
     setHasResult(false);
@@ -162,11 +151,109 @@ export default function App() {
     showNotification("Analysis exported successfully", "success");
   };
 
-  /* ---------------- Render ---------------- */
+  /* ---------------- Chat mode handler ---------------- */
+
+  const handlePipelineUpdate = (pipelineId: string, defenseMeta: DefenseMeta) => {
+    setLastPipelineId(pipelineId);
+    setLastDefenseMeta(defenseMeta);
+  };
+
+  /* ---------------- Mode Toggle Bar ---------------- */
+
+  const ModeToggle = () => (
+    <div className="flex items-center gap-1 bg-slate-800/60 border border-slate-700/40 rounded-xl p-1">
+      <button
+        onClick={() => setMode("chat")}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          mode === "chat"
+            ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/20"
+            : "text-slate-400 hover:text-white hover:bg-slate-700/40"
+        }`}
+      >
+        <MessageSquare className="w-4 h-4" />
+        Chat
+      </button>
+      <button
+        onClick={() => setMode("analyzer")}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          mode === "analyzer"
+            ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/20"
+            : "text-slate-400 hover:text-white hover:bg-slate-700/40"
+        }`}
+      >
+        <ScanSearch className="w-4 h-4" />
+        Analyzer
+      </button>
+    </div>
+  );
+
+  /* ---------------- Chat Layout ---------------- */
+
+  if (mode === "chat") {
+    return (
+      <div className="h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden">
+        {/* Top bar */}
+        <div className="flex-shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/10 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full" />
+              <div className="relative w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                <span className="text-white text-xs font-bold">A</span>
+              </div>
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-white tracking-tight leading-none">AegisMind</h1>
+              <p className="text-[10px] text-cyan-400/80 tracking-wide">When Defense Meets Reasoning</p>
+            </div>
+          </div>
+          <ModeToggle />
+        </div>
+
+        <NotificationToast
+          message={notification.message}
+          type={notification.type}
+          show={notification.show}
+        />
+
+        {/* Split layout */}
+        <div className="flex flex-1 overflow-hidden">
+          <ChatPanel onPipelineUpdate={handlePipelineUpdate} />
+          <PipelineDashboard pipelineId={lastPipelineId} defenseMeta={lastDefenseMeta} />
+        </div>
+
+        {/* Background decoration */}
+        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+          <motion.div
+            animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }}
+            transition={{ duration: 8, repeat: Infinity }}
+            className="absolute top-1/4 -left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------------- Analyzer Layout ---------------- */
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <Header />
+      <div className="flex-shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/10 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full" />
+              <div className="relative w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                <span className="text-white font-bold">A</span>
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-tight">AegisMind</h1>
+              <p className="text-xs text-cyan-400/80 tracking-wide">When Defense Meets Reasoning</p>
+            </div>
+          </div>
+          <ModeToggle />
+        </div>
+      </div>
 
       <NotificationToast
         message={notification.message}
@@ -195,12 +282,11 @@ export default function App() {
         )}
 
         {showBreakdown && result?.decomposition && (
-         <DecompositionView
-  decomposition={result.decomposition}
-  claims={result.claims || []}
-  ragResults={result.ragResults || []}
-/>
-
+          <DecompositionView
+            decomposition={result.decomposition}
+            claims={result.claims || []}
+            ragResults={result.ragResults || []}
+          />
         )}
 
         {hasResult && (
@@ -214,7 +300,6 @@ export default function App() {
 
       <Footer />
 
-      {/* Decorative background */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}

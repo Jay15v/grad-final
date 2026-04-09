@@ -1,7 +1,57 @@
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "phi3"
+
+
+def call_ollama_chat(message: str, history: list = None) -> str:
+    """
+    Calls Ollama phi3 in chat mode with conversation history.
+    Returns the assistant reply as a string.
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a helpful, knowledgeable AI assistant. "
+                "Provide clear, accurate, and concise responses."
+            ),
+        }
+    ]
+    if history:
+        for h in history:
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": message})
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "stream": False,
+        "options": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "num_predict": 512,
+        },
+    }
+
+    try:
+        resp = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data.get("message", {}).get("content", "")
+        return content if isinstance(content, str) else str(content)
+    except requests.exceptions.RequestException as e:
+        print("OLLAMA CHAT REQUEST ERROR:", str(e))
+        return "I'm unable to respond right now."
+    except ValueError as e:
+        print("OLLAMA CHAT JSON ERROR:", str(e))
+        return "I'm unable to respond right now."
+
 
 def call_phi3(prompt: str) -> str:
     """
