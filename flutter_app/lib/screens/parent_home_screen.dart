@@ -17,7 +17,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   final _authService = AuthService();
   final _firestoreService = FirestoreService();
 
-  Future<void> _signOut() async => _authService.signOut();
+Future<void> _signOut() async => _authService.signOut();
 
   @override
   Widget build(BuildContext context) {

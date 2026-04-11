@@ -44,6 +44,9 @@ def fuse_prompt(prompt: str):
     elif semantic_domain == "virtualization_hypotheticals":
         final_risk = bert_risk * 0.6
 
+    elif semantic_domain == "direct_harm":
+        final_risk = max(bert_risk * 1.5, 0.65)
+
     # --------------------------------------------------
     # 4️⃣ Final decision
     # --------------------------------------------------

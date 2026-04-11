@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
@@ -32,26 +33,49 @@ class ChatResponse {
 class AnalyzeResponse {
   final String status;
   final Map<String, dynamic> raw;
+  final dynamic caseId;
+  final bool rlhfPending;
 
-  AnalyzeResponse({required this.status, required this.raw});
+  AnalyzeResponse({
+    required this.status,
+    required this.raw,
+    this.caseId,
+    this.rlhfPending = false,
+  });
 
   factory AnalyzeResponse.fromJson(Map<String, dynamic> json) {
     return AnalyzeResponse(
       status: json['status'] as String? ?? 'ALLOW',
       raw: json,
+      caseId: json['case_id'],
+      rlhfPending: json['rlhf_pending'] ?? false,
     );
   }
 }
 
 class ApiService {
+  static Future<String?> getIdToken() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+      return await user.getIdToken();
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<ChatResponse> sendChat({
     required String message,
     required List<Map<String, String>> history,
   }) async {
+    final token = await getIdToken();
     final response = await http
         .post(
           Uri.parse('$_baseUrl/api/chat'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
           body: jsonEncode({'message': message, 'history': history}),
         )
         .timeout(const Duration(seconds: 120));
@@ -79,10 +103,14 @@ class ApiService {
   }
 
   static Future<AnalyzeResponse> analyzePrompt(String prompt) async {
+    final token = await getIdToken();
     final response = await http
         .post(
           Uri.parse('$_baseUrl/api/analyze'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
           body: jsonEncode({'prompt': prompt}),
         )
         .timeout(const Duration(seconds: 120));
@@ -91,7 +119,7 @@ class ApiService {
       throw Exception('Backend error: ${response.statusCode}');
     }
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return AnalyzeResponse.fromJson(data);
+    final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+    return AnalyzeResponse.fromJson(responseData);
   }
 }

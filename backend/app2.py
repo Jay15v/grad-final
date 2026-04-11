@@ -1,5 +1,12 @@
 import threading
 import uuid
+import sqlite3
+import logging
+
+# Step 1 & 2: load .env FIRST so all os.environ.get() calls below see the values
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -12,10 +19,38 @@ from services.decomposition_service import decompose_prompt
 from services.reasoning_service import generate_reasoning_from_steps, generate_claims_from_reasoning
 from services.rag_service import verify_claims_with_rag_google
 
-from dotenv import load_dotenv
-import os
+# Step 3 & 4: import firebase_admin after env is loaded
+try:
+    import firebase_admin
+    from firebase_admin import credentials
+    _firebase_available = True
+except ImportError:
+    firebase_admin = None
+    credentials = None
+    _firebase_available = False
+    logging.warning("firebase_admin not installed — token verification disabled")
 
-load_dotenv()
+# Step 5, 6, 7: resolve path and initialize
+if _firebase_available:
+    sa_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
+    if sa_path and not os.path.isabs(sa_path):
+        sa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), sa_path)
+    if sa_path and os.path.exists(sa_path):
+        try:
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(sa_path)
+                firebase_admin.initialize_app(cred)
+                print("✅ Firebase Admin initialized successfully")
+        except Exception as e:
+            logging.warning(f"Firebase Admin init failed: {e}")
+    else:
+        logging.warning(f"serviceAccount.json not found at: {sa_path}")
+
+from services.adaptive_store import (
+    init_db, log_case, update_rlhf_label,
+    get_pending_cases, get_buffer_stats,
+    get_firebase_uid, start_background_jobs
+)
 
 app = Flask(__name__)
 
@@ -26,6 +61,11 @@ CORS(
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "OPTIONS"],
 )
+
+import os as _os
+if _os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+    init_db()
+    start_background_jobs()
 
 BLOCK_THRESHOLD = 0.60
 HESITATE_THRESHOLD = 0.35
@@ -51,6 +91,14 @@ def _defense_check(message: str) -> dict:
         final_risk = max(bert_risk * 1.3, 0.55)
     elif semantic_domain == "virtualization_hypotheticals":
         final_risk = bert_risk * 0.6
+    elif semantic_domain == "violence_intent":
+        final_risk = max(bert_risk * 1.5, 0.45)
+    elif semantic_domain == "self_harm":
+        final_risk = max(bert_risk * 1.5, 0.45)
+    elif semantic_domain == "dangerous_weapons":
+        final_risk = max(bert_risk * 1.4, 0.65)
+    elif semantic_domain == "direct_harm":
+        final_risk = max(bert_risk * 1.2, 0.40)
 
     if final_risk >= BLOCK_THRESHOLD:
         decision = "BLOCK"
@@ -133,6 +181,9 @@ def analyze():
     if request.method == "OPTIONS":
         return ("", 204)
 
+    uid, role, parent_id = get_firebase_uid(request)
+    child_id = uid if role == 'child' else None
+
     data = request.get_json(force=True)
     prompt = (data.get("prompt") or "").strip()
 
@@ -140,6 +191,19 @@ def analyze():
         return jsonify({"error": "Empty prompt"}), 400
 
     result = fuse_prompt(prompt)
+
+    verdict = result.get('status', 'ALLOW')
+    risk_score = result.get('decision_meta', {}).get('final_risk', 0.0)
+    case_id = None
+    try:
+        case_id = log_case(prompt, verdict, risk_score, child_id, parent_id)
+    except Exception as e:
+        logging.warning(f"log_case failed: {e}")
+
+    result['case_id'] = case_id
+    if verdict == 'HESITATE' and parent_id:
+        result['rlhf_pending'] = True
+
     return jsonify(result), 200
 
 
@@ -151,6 +215,9 @@ def chat():
     if request.method == "OPTIONS":
         return ("", 204)
 
+    uid, role, parent_id = get_firebase_uid(request)
+    child_id = uid if role == 'child' else None
+
     data = request.get_json(force=True)
     message = (data.get("message") or "").strip()
     history = data.get("history") or []
@@ -161,6 +228,16 @@ def chat():
     # 1. Defense check
     defense = _defense_check(message)
     decision = defense["decision"]
+    risk_score = defense.get("final_risk", 0.0)
+
+    # Log the case (only BLOCK/HESITATE are stored)
+    case_id = None
+    rlhf_pending = False
+    try:
+        case_id = log_case(message, decision, risk_score, child_id, parent_id)
+        rlhf_pending = decision == 'HESITATE' and parent_id is not None
+    except Exception as e:
+        logging.warning(f"log_case failed in chat: {e}")
 
     if decision == "BLOCK":
         return jsonify({
@@ -168,6 +245,8 @@ def chat():
             "reply": None,
             "defense_meta": defense,
             "pipeline_id": None,
+            "case_id": case_id,
+            "rlhf_pending": rlhf_pending,
         })
 
     # 2. Ollama chat reply
@@ -189,6 +268,8 @@ def chat():
         "reply": reply,
         "defense_meta": defense,
         "pipeline_id": pipeline_id,
+        "case_id": case_id,
+        "rlhf_pending": rlhf_pending,
     })
 
 
@@ -201,6 +282,63 @@ def get_pipeline(pipeline_id):
     if entry is None:
         return jsonify({"error": "Pipeline not found"}), 404
     return jsonify(entry)
+
+
+# ------------------------------------------------------------------
+# New: RLHF feedback
+# ------------------------------------------------------------------
+@app.route("/api/feedback/<int:case_id>", methods=["POST", "OPTIONS"])
+def feedback(case_id):
+    if request.method == "OPTIONS":
+        return ("", 204)
+    uid, role, _ = get_firebase_uid(request)
+    if role != 'parent':
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(force=True)
+    label = data.get("label")
+    if label not in [0, 1]:
+        return jsonify({"error": "Invalid label"}), 400
+    # Verify case belongs to this parent
+    try:
+        conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), 'adaptive_cases.db'))
+        row = conn.execute("SELECT parent_id FROM cases WHERE id=?", (case_id,)).fetchone()
+        conn.close()
+        if row is None:
+            return jsonify({"error": "Case not found"}), 404
+        case_parent_id = row[0]
+        if case_parent_id is not None and case_parent_id != uid:
+            return jsonify({"error": "Forbidden"}), 403
+    except Exception as e:
+        logging.warning(f"feedback auth check failed: {e}")
+    success = update_rlhf_label(case_id, label)
+    return jsonify({"success": success, "case_id": case_id}), 200
+
+
+# ------------------------------------------------------------------
+# New: Parent review queue
+# ------------------------------------------------------------------
+@app.route("/api/pending", methods=["GET", "OPTIONS"])
+def pending():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    uid, role, _ = get_firebase_uid(request)
+    if uid is None:
+        return jsonify({"error": "Forbidden"}), 403
+    if role == 'admin':
+        cases = get_pending_cases(None)
+    elif role == 'parent':
+        cases = get_pending_cases(uid)
+    else:
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify({"cases": cases, "count": len(cases)}), 200
+
+
+# ------------------------------------------------------------------
+# New: Buffer statistics
+# ------------------------------------------------------------------
+@app.route("/api/buffer/stats", methods=["GET"])
+def buffer_stats():
+    return jsonify(get_buffer_stats()), 200
 
 
 # ------------------------------------------------------------------
