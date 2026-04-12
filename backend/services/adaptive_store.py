@@ -17,7 +17,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'adaptive_cases.db')
+_default_db = os.path.join(os.path.dirname(__file__), '..', 'adaptive_cases.db')
+DB_PATH = os.environ.get('ADAPTIVE_DB_PATH') or _default_db
 _lock = threading.Lock()
 
 

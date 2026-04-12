@@ -14,6 +14,9 @@ class _AnalyzerScreenState extends State<AnalyzerScreen> {
   bool _isAnalyzing = false;
   AnalyzeResponse? _result;
   String? _error;
+  bool _rlhfPending = false;
+  // ignore: unused_field
+  int? _caseId;
 
   Future<void> _analyze() async {
     final prompt = _controller.text.trim();
@@ -23,11 +26,17 @@ class _AnalyzerScreenState extends State<AnalyzerScreen> {
       _isAnalyzing = true;
       _result = null;
       _error = null;
+      _rlhfPending = false;
+      _caseId = null;
     });
 
     try {
       final res = await ApiService.analyzePrompt(prompt);
-      setState(() => _result = res);
+      setState(() {
+        _result = res;
+        _rlhfPending = res.rlhfPending;
+        _caseId = res.caseId as int?;
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -190,6 +199,28 @@ class _AnalyzerScreenState extends State<AnalyzerScreen> {
           if (_result != null) ...[
             const SizedBox(height: 20),
             _ResultCard(result: _result!),
+            if (_rlhfPending)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This prompt has been flagged for parental review',
+                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ],
       ),

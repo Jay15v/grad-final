@@ -4,19 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
-const String _baseUrl = 'http://127.0.0.1:5000';
+const String _baseUrl = 'http://192.168.1.3:5000';
 
 class ChatResponse {
   final String decision;
   final String? reply;
   final DefenseMeta defenseMeta;
   final String? pipelineId;
+  final bool rlhfPending;
 
   ChatResponse({
     required this.decision,
     required this.reply,
     required this.defenseMeta,
     required this.pipelineId,
+    this.rlhfPending = false,
   });
 
   factory ChatResponse.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class ChatResponse {
       defenseMeta: DefenseMeta.fromJson(
           json['defense_meta'] as Map<String, dynamic>? ?? {}),
       pipelineId: json['pipeline_id'] as String?,
+      rlhfPending: json['rlhf_pending'] as bool? ?? false,
     );
   }
 }

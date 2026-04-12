@@ -27,6 +27,7 @@ class _ChatPanelState extends State<ChatPanel> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
+  bool _rlhfPending = false;
 
   List<Map<String, String>> get _history {
     return _messages
@@ -58,7 +59,10 @@ class _ChatPanelState extends State<ChatPanel> {
     if (text.isEmpty || _isSending) return;
 
     _controller.clear();
-    setState(() => _isSending = true);
+    setState(() {
+      _isSending = true;
+      _rlhfPending = false;
+    });
 
     final userMsgId = UniqueKey().toString();
     final loadingMsgId = UniqueKey().toString();
@@ -79,6 +83,7 @@ class _ChatPanelState extends State<ChatPanel> {
           await ApiService.sendChat(message: text, history: _history);
 
       setState(() {
+        _rlhfPending = response.rlhfPending;
         _messages.removeWhere((m) => m.id == loadingMsgId);
 
         if (response.decision == 'BLOCK') {
@@ -181,6 +186,30 @@ class _ChatPanelState extends State<ChatPanel> {
                 MessageBubble(message: _messages[i]),
           ),
         ),
+
+        // RLHF banner
+        if (_rlhfPending)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'This prompt has been flagged for parental review',
+                    style: TextStyle(color: Colors.orange, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
         // Input
         Container(

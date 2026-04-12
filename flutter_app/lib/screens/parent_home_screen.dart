@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
@@ -13,11 +16,296 @@ class ParentHomeScreen extends StatefulWidget {
   State<ParentHomeScreen> createState() => _ParentHomeScreenState();
 }
 
-class _ParentHomeScreenState extends State<ParentHomeScreen> {
+class _ParentHomeScreenState extends State<ParentHomeScreen>
+    with TickerProviderStateMixin {
   final _authService = AuthService();
   final _firestoreService = FirestoreService();
 
-Future<void> _signOut() async => _authService.signOut();
+  List<Map<String, dynamic>> _pendingCases = [];
+  bool _loadingPending = false;
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+    fetchPendingCases();
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signOut() async => _authService.signOut();
+
+  Future<void> fetchPendingCases() async {
+    setState(() => _loadingPending = true);
+    try {
+      final token = await ApiService.getIdToken();
+      final response = await http.get(
+        Uri.parse('http://localhost:5000/api/pending'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _pendingCases = List<Map<String, dynamic>>.from(data['cases']);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load pending reviews: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingPending = false);
+    }
+  }
+
+  Future<void> submitFeedback(int caseId, int label) async {
+    try {
+      final token = await ApiService.getIdToken();
+      final response = await http.post(
+        Uri.parse('http://localhost:5000/api/feedback/$caseId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'label': label}),
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        setState(() {
+          _pendingCases.removeWhere((c) => c['case_id'] == caseId);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                label == 1 ? 'Marked as dangerous' : 'Marked as safe',
+              ),
+              backgroundColor: label == 1 ? Colors.red : Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Server error ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit feedback: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildPendingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Row(
+          children: [
+            const Text(
+              'Pending Reviews',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Pulsing orange dot
+            AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                return Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.orange.withOpacity(
+                      0.4 + (_pulseController.value * 0.6),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            // Count badge
+            if (_pendingCases.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_pendingCases.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Loading state
+        if (_loadingPending)
+          const Center(child: CircularProgressIndicator()),
+
+        // Empty state
+        if (!_loadingPending && _pendingCases.isEmpty)
+          const Text(
+            'No pending reviews',
+            style: TextStyle(color: Colors.grey),
+          ),
+
+        // Pending cases list
+        if (!_loadingPending && _pendingCases.isNotEmpty)
+          ...(_pendingCases.map((c) {
+            final riskScore = (c['risk_score'] as num).toDouble();
+            final riskPercent = '${(riskScore * 100).toStringAsFixed(0)}%';
+            final createdAt = DateTime.fromMillisecondsSinceEpoch(
+              ((c['created_at'] as num) * 1000).toInt(),
+            );
+            final dateStr =
+                '${createdAt.day}/${createdAt.month}/${createdAt.year} '
+                '${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}';
+
+            return AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                final borderColor = Color.lerp(
+                  Colors.orange,
+                  Colors.orange.withOpacity(0.3),
+                  _pulseController.value,
+                )!;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor, width: 2),
+                    color: Colors.orange.withOpacity(0.05),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title
+                      const Text(
+                        'Review Required — Uncertain Content Detected',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Prompt text
+                      Text(
+                        c['prompt'] as String,
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Risk score
+                      Row(
+                        children: [
+                          Text(
+                            'Risk Score: $riskPercent',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Risk bar
+                      LinearProgressIndicator(
+                        value: riskScore,
+                        backgroundColor: Colors.grey.withOpacity(0.3),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          riskScore > 0.7
+                              ? Colors.red
+                              : riskScore > 0.4
+                                  ? Colors.orange
+                                  : Colors.green,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Date
+                      Text(
+                        'Submitted: $dateStr',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Feedback buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => submitFeedback(
+                                c['case_id'] as int,
+                                1,
+                              ),
+                              icon: const Icon(Icons.dangerous_outlined,
+                                  size: 16),
+                              label: const Text('Confirm Dangerous'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => submitFeedback(
+                                c['case_id'] as int,
+                                0,
+                              ),
+                              icon: const Icon(Icons.check_circle_outline,
+                                  size: 16),
+                              label: const Text('Mark as Safe'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          }).toList()),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +328,8 @@ Future<void> _signOut() async => _authService.signOut();
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _buildPendingSection(),
+                        const SizedBox(height: 24),
                         _buildWelcomeCard(parent),
                         const SizedBox(height: 20),
                         _buildChatCard(context),
@@ -109,6 +399,11 @@ Future<void> _signOut() async => _authService.signOut();
             ],
           ),
           const Spacer(),
+          IconButton(
+            icon: Icon(Icons.refresh, color: AppColors.textMuted, size: 20),
+            tooltip: 'Refresh pending reviews',
+            onPressed: fetchPendingCases,
+          ),
           IconButton(
             icon: Icon(Icons.logout, color: AppColors.textMuted, size: 20),
             tooltip: 'Sign out',
@@ -222,7 +517,8 @@ Future<void> _signOut() async => _authService.signOut();
                   const SizedBox(height: 2),
                   Text(
                     'Access AegisMind\'s safe chat and analyzer',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                 ],
               ),
