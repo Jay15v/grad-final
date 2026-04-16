@@ -46,6 +46,9 @@ if _firebase_available:
     else:
         logging.warning(f"serviceAccount.json not found at: {sa_path}")
 
+from services.consensus_service import cross_model_validate
+from services.notification_service import notify_parent_if_needed
+
 from services.adaptive_store import (
     init_db, log_case, update_rlhf_label,
     get_pending_cases, get_buffer_stats,
@@ -256,7 +259,16 @@ def chat():
     # 2. Ollama chat reply
     reply = call_ollama_chat(message, history)
 
-    # 3. Start background pipeline
+    # 3. Cross-model consensus validation
+    consensus_result = None
+    try:
+        consensus_result = cross_model_validate(message)
+        if consensus_result.get("verdict") == "DISAGREEMENT":
+            notify_parent_if_needed(child_id or "anonymous", message, consensus_result)
+    except Exception as e:
+        logging.warning(f"consensus validation failed: {e}")
+
+    # 4. Start background pipeline
     pipeline_id = str(uuid.uuid4())
     pipeline_store[pipeline_id] = {"status": "running", "stages": {}}
 
@@ -267,6 +279,9 @@ def chat():
     )
     thread.start()
 
+    verdict = consensus_result["verdict"] if consensus_result else None
+    display_label = consensus_result["display_label"] if consensus_result else None
+    print(f"DEBUG response JSON: verdict={verdict}, display_label={display_label}")
     return jsonify({
         "decision": decision,
         "reply": reply,
@@ -274,6 +289,9 @@ def chat():
         "pipeline_id": pipeline_id,
         "case_id": case_id,
         "rlhf_pending": rlhf_pending,
+        "verdict": verdict,
+        "display_label": display_label,
+        "avg_agreement": consensus_result["avg_agreement"] if consensus_result else None,
     })
 
 
@@ -418,4 +436,4 @@ if __name__ == "__main__":
         methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
         print(f"  {str(rule):40} [{methods}]")
     print("="*60 + "\n")
-    app.run(debug=False, host="0.0.0.0", port=53908)
+    app.run(debug=False, host="0.0.0.0", port=5001)

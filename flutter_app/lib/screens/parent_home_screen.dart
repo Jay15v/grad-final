@@ -48,7 +48,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     try {
       final token = await ApiService.getIdToken();
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:53908/api/pending'),
+        Uri.parse('http://127.0.0.1:5000/api/pending'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -75,7 +75,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     try {
       final token = await ApiService.getIdToken();
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:53908/api/feedback/$caseId'),
+        Uri.parse('http://127.0.0.1:5000/api/feedback/$caseId'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',

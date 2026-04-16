@@ -6,7 +6,13 @@ import 'message_bubble.dart';
 import 'app_colors.dart';
 
 class ChatPanel extends StatefulWidget {
-  final void Function(String pipelineId, DefenseMeta meta) onPipelineUpdate;
+  final void Function(
+    String pipelineId,
+    DefenseMeta meta, {
+    String? verdict,
+    String? displayLabel,
+    double? avgAgreement,
+  }) onPipelineUpdate;
 
   const ChatPanel({super.key, required this.onPipelineUpdate});
 
@@ -94,8 +100,7 @@ class _ChatPanelState extends State<ChatPanel> {
             decision: 'BLOCK',
             defenseMeta: response.defenseMeta,
           ));
-          widget.onPipelineUpdate(
-              'blocked-$userMsgId', response.defenseMeta);
+          widget.onPipelineUpdate('blocked-$userMsgId', response.defenseMeta);
         } else {
           _messages.add(ChatMessage(
             id: UniqueKey().toString(),
@@ -104,10 +109,16 @@ class _ChatPanelState extends State<ChatPanel> {
             decision: response.decision,
             defenseMeta: response.defenseMeta,
             pipelineId: response.pipelineId,
+            verdict: response.verdict,
           ));
           if (response.pipelineId != null) {
             widget.onPipelineUpdate(
-                response.pipelineId!, response.defenseMeta);
+              response.pipelineId!,
+              response.defenseMeta,
+              verdict: response.verdict,
+              displayLabel: response.displayLabel,
+              avgAgreement: response.avgAgreement,
+            );
           }
         }
       });
@@ -118,7 +129,7 @@ class _ChatPanelState extends State<ChatPanel> {
           id: UniqueKey().toString(),
           role: MessageRole.assistant,
           content:
-              'Error: Could not reach the backend. Make sure it\'s running on port 53908.',
+              'Error: Could not reach the backend. Make sure it\'s running on port 5000.',
         ));
       });
     } finally {

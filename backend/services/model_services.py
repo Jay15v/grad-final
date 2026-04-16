@@ -17,22 +17,22 @@ _has_local_weights = any(
 FALLBACK_MODEL = "jackhhao/jailbreak-classifier"
 
 if _has_local_weights:
-    print("🔄 Loading tokenizer from local model...")
+    print(f"🔄 Loading BERT model from: {MODEL_DIR}  (retrained local weights)")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR, local_files_only=True)
-    print("🔄 Loading model from local weights...")
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_DIR, local_files_only=True
     ).to(DEVICE)
+    _active_model_name = MODEL_DIR
 else:
-    print(f"⚠️  Local model weights not found. Downloading fallback: {FALLBACK_MODEL}")
-    print("   (This only happens once — weights will be cached locally)")
+    print(f"⚠️  Local model weights not found. Loading fallback: {FALLBACK_MODEL}")
     tokenizer = AutoTokenizer.from_pretrained(FALLBACK_MODEL)
     model = AutoModelForSequenceClassification.from_pretrained(
         FALLBACK_MODEL
     ).to(DEVICE)
+    _active_model_name = FALLBACK_MODEL
 
 model.eval()
-print("✅ BERT model ready")
+print(f"✅ BERT model ready  →  active model: [{_active_model_name}]  device: [{DEVICE}]")
 
 
 def bert_predict(prompt: str) -> float:

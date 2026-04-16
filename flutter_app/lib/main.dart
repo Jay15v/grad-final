@@ -15,6 +15,8 @@ import 'widgets/app_colors.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Enable offline persistence so cached Firestore data survives network drops.
+  FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
   runApp(const AegisMindApp());
 }
 
@@ -87,12 +89,21 @@ class _RoleRouterState extends State<_RoleRouter> {
   }
 
   Future<UserModel?> _loadUser() async {
-    // Read raw Firestore doc without converter to avoid any serialization issues
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.uid)
-        .get()
-        .timeout(const Duration(seconds: 15));
+    // Try network first; fall back to local cache if offline.
+    DocumentSnapshot<Map<String, dynamic>> doc;
+    try {
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .get(const GetOptions(source: Source.serverAndCache))
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      // Network unavailable — serve from local cache instead of crashing.
+      doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .get(const GetOptions(source: Source.cache));
+    }
     if (!doc.exists) return null;
     final data = doc.data()!;
     return UserModel(

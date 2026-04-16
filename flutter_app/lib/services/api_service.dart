@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
-const String _baseUrl = 'http://127.0.0.1:53908';
+const String _baseUrl = 'http://127.0.0.1:5000';
 
 class ChatResponse {
   final String decision;
@@ -12,6 +12,9 @@ class ChatResponse {
   final DefenseMeta defenseMeta;
   final String? pipelineId;
   final bool rlhfPending;
+  final String? verdict;
+  final String? displayLabel;
+  final double? avgAgreement;
 
   ChatResponse({
     required this.decision,
@@ -19,9 +22,13 @@ class ChatResponse {
     required this.defenseMeta,
     required this.pipelineId,
     this.rlhfPending = false,
+    this.verdict,
+    this.displayLabel,
+    this.avgAgreement,
   });
 
   factory ChatResponse.fromJson(Map<String, dynamic> json) {
+    print("DEBUG flutter received: ${json['verdict']}");
     return ChatResponse(
       decision: json['decision'] as String? ?? 'ALLOW',
       reply: json['reply'] as String?,
@@ -29,6 +36,9 @@ class ChatResponse {
           json['defense_meta'] as Map<String, dynamic>? ?? {}),
       pipelineId: json['pipeline_id'] as String?,
       rlhfPending: json['rlhf_pending'] as bool? ?? false,
+      verdict: json['verdict'] as String?,
+      displayLabel: json['display_label'] as String?,
+      avgAgreement: (json['avg_agreement'] as num?)?.toDouble(),
     );
   }
 }
@@ -88,6 +98,7 @@ class ApiService {
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+    print("DEBUG flutter received: ${data['verdict']}");
     return ChatResponse.fromJson(data);
   }
 

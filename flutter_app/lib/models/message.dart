@@ -10,6 +10,7 @@ class ChatMessage {
   final DefenseMeta? defenseMeta;
   final String? pipelineId;
   final bool isLoading;
+  final String? verdict;
 
   ChatMessage({
     required this.id,
@@ -19,6 +20,7 @@ class ChatMessage {
     this.defenseMeta,
     this.pipelineId,
     this.isLoading = false,
+    this.verdict,
   });
 
   ChatMessage copyWith({
@@ -27,6 +29,7 @@ class ChatMessage {
     String? pipelineId,
     DefenseMeta? defenseMeta,
     String? decision,
+    String? verdict,
   }) {
     return ChatMessage(
       id: id,
@@ -36,6 +39,7 @@ class ChatMessage {
       defenseMeta: defenseMeta ?? this.defenseMeta,
       pipelineId: pipelineId ?? this.pipelineId,
       isLoading: isLoading ?? this.isLoading,
+      verdict: verdict ?? this.verdict,
     );
   }
 }

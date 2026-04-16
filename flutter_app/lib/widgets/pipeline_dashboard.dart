@@ -10,11 +10,17 @@ import 'app_colors.dart';
 class PipelineDashboard extends StatefulWidget {
   final String? pipelineId;
   final DefenseMeta? defenseMeta;
+  final String? verdict;
+  final String? displayLabel;
+  final double? avgAgreement;
 
   const PipelineDashboard({
     super.key,
     this.pipelineId,
     this.defenseMeta,
+    this.verdict,
+    this.displayLabel,
+    this.avgAgreement,
   });
 
   @override
@@ -191,6 +197,12 @@ class _PipelineDashboardState extends State<PipelineDashboard> {
                     stage: _pipeline.stages.rag,
                     contentBuilder: (data) => RagContent(data: data),
                   ),
+                  const SizedBox(height: 8),
+                  _CrossModelCard(
+                    verdict: widget.verdict,
+                    displayLabel: widget.displayLabel,
+                    avgAgreement: widget.avgAgreement,
+                  ),
                 ],
 
                 // Blocked message — no pipeline stages
@@ -231,6 +243,158 @@ class _PipelineDashboardState extends State<PipelineDashboard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Cross-Model Validation card ──────────────────────────────────────────────
+
+class _CrossModelCard extends StatelessWidget {
+  final String? verdict;
+  final String? displayLabel;
+  final double? avgAgreement;
+
+  const _CrossModelCard({this.verdict, this.displayLabel, this.avgAgreement});
+
+  Color get _verdictColor {
+    switch (verdict) {
+      case 'CONSENSUS':
+        return const Color(0xFF16A34A);
+      case 'PARTIAL':
+        return const Color(0xFFCA8A04);
+      case 'DISAGREEMENT':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFF6B7280);
+    }
+  }
+
+  String get _verdictIcon {
+    switch (verdict) {
+      case 'CONSENSUS':
+        return '✅';
+      case 'PARTIAL':
+        return '⚠️';
+      case 'DISAGREEMENT':
+        return '🔴';
+      default:
+        return '⏳';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isReady = verdict != null;
+    final color = isReady ? _verdictColor : AppColors.textMuted;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        border: Border.all(color: color.withOpacity(0.25)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(Icons.smart_toy_outlined, size: 14, color: color),
+              const SizedBox(width: 6),
+              const Text(
+                'Cross-Model Validation',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              if (!isReady)
+                SizedBox(
+                  width: 11,
+                  height: 11,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 1.5, color: AppColors.warning),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Model rows — phi3, llama3, mistral
+          ...['phi3', 'llama3', 'mistral'].map((model) => Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(
+                  children: [
+                    Text(
+                      isReady ? _verdictIcon : '⏳',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      model,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isReady ? Colors.white : AppColors.textMuted,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+
+          if (isReady) ...[
+            const SizedBox(height: 8),
+            Divider(color: color.withOpacity(0.2), height: 1),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text('Avg Agreement:',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                const SizedBox(width: 6),
+                Text(
+                  avgAgreement != null
+                      ? avgAgreement!.toStringAsFixed(2)
+                      : '—',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text('Verdict:',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: color.withOpacity(0.4)),
+                  ),
+                  child: Text(
+                    displayLabel ?? verdict ?? '',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

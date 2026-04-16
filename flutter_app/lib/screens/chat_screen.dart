@@ -14,11 +14,23 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   String? _lastPipelineId;
   DefenseMeta? _lastDefenseMeta;
+  String? _lastVerdict;
+  String? _lastDisplayLabel;
+  double? _lastAvgAgreement;
 
-  void _onPipelineUpdate(String pipelineId, DefenseMeta meta) {
+  void _onPipelineUpdate(
+    String pipelineId,
+    DefenseMeta meta, {
+    String? verdict,
+    String? displayLabel,
+    double? avgAgreement,
+  }) {
     setState(() {
       _lastPipelineId = pipelineId;
       _lastDefenseMeta = meta;
+      _lastVerdict = verdict;
+      _lastDisplayLabel = displayLabel;
+      _lastAvgAgreement = avgAgreement;
     });
   }
 
@@ -42,6 +54,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: PipelineDashboard(
                 pipelineId: _lastPipelineId,
                 defenseMeta: _lastDefenseMeta,
+                verdict: _lastVerdict,
+                displayLabel: _lastDisplayLabel,
+                avgAgreement: _lastAvgAgreement,
               ),
             ),
           ],
@@ -68,6 +83,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     PipelineDashboard(
                       pipelineId: _lastPipelineId,
                       defenseMeta: _lastDefenseMeta,
+                      verdict: _lastVerdict,
+                      displayLabel: _lastDisplayLabel,
+                      avgAgreement: _lastAvgAgreement,
                     ),
                   ],
                 ),

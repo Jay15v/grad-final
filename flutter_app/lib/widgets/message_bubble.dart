@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/message.dart';
 import '../models/defense_meta.dart';
 import 'app_colors.dart';
+import 'verdict_banner.dart';
 
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
@@ -223,6 +224,10 @@ class _AssistantBubble extends StatelessWidget {
           if (message.defenseMeta != null && !message.isLoading) ...[
             const SizedBox(height: 4),
             _DefenseBadge(meta: message.defenseMeta!),
+          ],
+          if (message.verdict != null && !message.isLoading) ...[
+            const SizedBox(height: 4),
+            VerdictBanner(verdict: message.verdict!),
           ],
         ],
       ),
