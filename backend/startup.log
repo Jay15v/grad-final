@@ -1,0 +1,39 @@
+C:\Users\lenovo\Lib\site-packages\huggingface_hub\file_download.py:943: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+2026-04-16 01:01:17.878287: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+2026-04-16 01:01:19.116708: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+C:\Users\lenovo\Lib\site-packages\huggingface_hub\file_download.py:943: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+C:\Users\lenovo\Lib\site-packages\huggingface_hub\file_download.py:943: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+⚠️  Local model weights not found. Downloading fallback: jackhhao/jailbreak-classifier
+   (This only happens once — weights will be cached locally)
+✅ BERT model ready
+🔄 Loading SBERT...
+🔄 Loading semantic DB...
+🔄 Encoding semantic patterns...
+✅ Semantic service ready
+✅ Firebase Admin initialized successfully
+
+============================================================
+ROUTES REGISTERED ON STARTUP:
+============================================================
+  /                                        [GET]
+  /api/analyze                             [POST]
+  /api/buffer/stats                        [GET]
+  /api/chat                                [POST]
+  /api/feedback/<int:case_id>              [POST]
+  /api/pending                             [GET]
+  /api/pipeline/<pipeline_id>              [GET]
+  /api/retrain/status                      [GET]
+  /api/retrain/trigger                     [POST]
+  /static/<path:filename>                  [GET]
+============================================================
+
+ * Serving Flask app 'app2'
+ * Debug mode: off

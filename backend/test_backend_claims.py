@@ -1,7 +1,7 @@
 import requests
 import json
 
-url = "http://127.0.0.1:5000/api/analyze"
+url = "http://127.0.0.1:53908 /api/analyze"
 
 payload = {
     "prompt": "Explain why the sky is blue"

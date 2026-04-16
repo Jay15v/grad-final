@@ -51,6 +51,7 @@ from services.adaptive_store import (
     get_pending_cases, get_buffer_stats,
     get_firebase_uid, start_background_jobs
 )
+from services.retrain_bert import retrain_state, run_retraining, check_trigger_conditions
 
 app = Flask(__name__)
 
@@ -234,8 +235,11 @@ def chat():
     case_id = None
     rlhf_pending = False
     try:
+        # DEBUG: Log auth info
+        logging.info(f"[CHAT] uid={uid}, role={role}, parent_id={parent_id}, decision={decision}, risk={risk_score}")
         case_id = log_case(message, decision, risk_score, child_id, parent_id)
         rlhf_pending = decision == 'HESITATE' and parent_id is not None
+        logging.info(f"[CHAT] rlhf_pending={rlhf_pending} (decision={decision}, parent_id={parent_id})")
     except Exception as e:
         logging.warning(f"log_case failed in chat: {e}")
 
@@ -349,6 +353,54 @@ def root():
     return jsonify({"message": "Backend is running", "endpoint": "/api/analyze"}), 200
 
 
+@app.route('/api/retrain/status', methods=['GET'])
+def retrain_status():
+    """
+    Returns current retraining state.
+    Auth: any valid Firebase token (parent, child, or admin).
+    """
+    uid, role, _ = get_firebase_uid(request)
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 403
+    can_retrain, trigger_reason = check_trigger_conditions()
+    return jsonify({
+        'status': retrain_state['status'],
+        'message': retrain_state['message'],
+        'last_f1_before': retrain_state['last_f1_before'],
+        'last_f1_after': retrain_state['last_f1_after'],
+        'can_retrain': can_retrain,
+        'trigger_reason': trigger_reason,
+    })
+
+
+@app.route('/api/retrain/trigger', methods=['POST'])
+def retrain_trigger():
+    """
+    Starts retraining in a background daemon thread.
+    Auth: admin role only.
+    Optional body: {"force": true} to bypass trigger condition checks.
+    """
+    uid, role, _ = get_firebase_uid(request)
+    if not uid or role != 'admin':
+        return jsonify({'error': 'Admin role required'}), 403
+    if retrain_state['status'] == 'running':
+        return jsonify({'error': 'Retraining already in progress'}), 409
+    body = request.get_json(silent=True, force=True) or {}
+    force = body.get('force', False)
+    t = threading.Thread(
+        target=run_retraining,
+        kwargs={'force': force},
+        daemon=True
+    )
+    t.start()
+    return jsonify({
+        'started': True,
+        'forced': force,
+        'message': 'Retraining started in background thread',
+    })
+
+
+
 @app.after_request
 def add_cors_headers(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -357,5 +409,13 @@ def add_cors_headers(resp):
     return resp
 
 
+# Debug: Print all registered routes on startup
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    print("\n" + "="*60)
+    print("ROUTES REGISTERED ON STARTUP:")
+    print("="*60)
+    for rule in sorted(app.url_map.iter_rules(), key=lambda r: str(r)):
+        methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
+        print(f"  {str(rule):40} [{methods}]")
+    print("="*60 + "\n")
+    app.run(debug=False, host="0.0.0.0", port=53908)

@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
-const String _baseUrl = 'http://192.168.1.3:5000';
+const String _baseUrl = 'http://127.0.0.1:53908';
 
 class ChatResponse {
   final String decision;

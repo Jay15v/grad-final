@@ -2,7 +2,7 @@ import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "phi3"
+MODEL_NAME = "qwen2:0.5b"
 
 
 def call_ollama_chat(message: str, history: list = None) -> str:

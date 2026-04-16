@@ -118,7 +118,7 @@ class _ChatPanelState extends State<ChatPanel> {
           id: UniqueKey().toString(),
           role: MessageRole.assistant,
           content:
-              'Error: Could not reach the backend. Make sure it\'s running on port 5000.',
+              'Error: Could not reach the backend. Make sure it\'s running on port 53908.',
         ));
       });
     } finally {
