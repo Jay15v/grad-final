@@ -274,39 +274,68 @@ class RagContent extends StatelessWidget {
 
           IconData icon;
           Color color;
+          String label;
           if (verdict == 'SUPPORTED_WEAK') {
             icon = Icons.check_circle_outline;
             color = AppColors.success;
+            label = 'Supported';
           } else if (verdict == 'NO_EVIDENCE') {
             icon = Icons.cancel_outlined;
             color = AppColors.danger;
+            label = 'No Evidence';
           } else {
             icon = Icons.warning_amber_outlined;
             color = AppColors.warning;
+            label = 'Weak Evidence';
           }
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, size: 13, color: color),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(preview,
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFFCBD5E1),
-                              height: 1.4)),
-                      if (source != null)
-                        Text('Source: $source',
-                            style: TextStyle(
-                                fontSize: 10, color: AppColors.textMuted)),
+                // Verdict badge row
+                Row(
+                  children: [
+                    Icon(icon, size: 13, color: color),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: color.withOpacity(0.35)),
+                      ),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: color),
+                      ),
+                    ),
+                    if (source != null) ...[
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          source,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted),
+                        ),
+                      ),
                     ],
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Claim text
+                Text(
+                  preview,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFCBD5E1),
+                      height: 1.4),
                 ),
               ],
             ),

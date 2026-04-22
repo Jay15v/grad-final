@@ -384,6 +384,52 @@ class _AppBar extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          // Logout button
+          Tooltip(
+            message: 'Sign out',
+            child: GestureDetector(
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppColors.bgSurface,
+                    title: const Text('Sign out',
+                        style: TextStyle(color: Colors.white, fontSize: 15)),
+                    content: Text('Are you sure you want to sign out?',
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 13)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text('Cancel',
+                            style: TextStyle(color: AppColors.textMuted)),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text('Sign out',
+                            style: TextStyle(color: AppColors.danger)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await FirebaseAuth.instance.signOut();
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withOpacity(0.6),
+                  border: Border.all(
+                      color: AppColors.border.withOpacity(0.4)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.logout,
+                    size: 16, color: AppColors.textMuted),
+              ),
+            ),
+          ),
         ],
       ),
     );

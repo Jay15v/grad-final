@@ -5,6 +5,14 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+import warnings as _warnings
+import time as _time
+_warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
+try:
+    from duckduckgo_search import DDGS
+    _DDGS_AVAILABLE = True
+except ImportError:
+    _DDGS_AVAILABLE = False
 
 import faiss
 import numpy as np
@@ -69,13 +77,89 @@ _ingest_cache = set()
 # ==================================================
 # 2) Google Search + Fetch
 # ==================================================
+def wikipedia_search(query: str, num: int = 5):
+    """Search Wikipedia — free, no API key, always returns English results."""
+    try:
+        resp = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": query[:128],
+                "srlimit": num,
+                "format": "json",
+                "srprop": "snippet",
+            },
+            headers={"User-Agent": "AegisMind-RAGVerifier/1.0 (research project)"},
+            timeout=15,
+        )
+        data = resp.json()
+        out = []
+        for item in data.get("query", {}).get("search", []):
+            title = item.get("title", "")
+            snippet = item.get("snippet", "").replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+            page_url = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+            out.append({
+                "title": title,
+                "link": page_url,
+                "snippet": snippet,
+                "displayLink": "en.wikipedia.org",
+            })
+        print(f"RAG Wikipedia fallback: got {len(out)} results")
+        return out
+    except Exception as e:
+        print(f"RAG Wikipedia fallback error: {e}")
+        return []
+
+
+def duckduckgo_search(query: str, num: int = 5):
+    """Fallback search using DuckDuckGo — no API key required."""
+    if not _DDGS_AVAILABLE:
+        print("RAG fallback: duckduckgo_search not installed, trying Wikipedia")
+        return wikipedia_search(query, num)
+    print(f"RAG fallback (DuckDuckGo) searching: {query[:60]}...")
+    for attempt in range(2):
+        if attempt > 0:
+            _time.sleep(2.0)
+        else:
+            _time.sleep(1.0)  # Base delay to avoid rate limiting
+        try:
+            with DDGS() as ddgs:
+                raw = list(ddgs.text(query[:128], max_results=num))
+            if not raw and attempt < 1:
+                print(f"RAG fallback: 0 results (attempt {attempt+1}), retrying...")
+                continue
+            out = []
+            english_count = 0
+            for it in raw:
+                body = it.get("body", "")
+                # Count as English if mostly ASCII
+                english_count += 1 if body and sum(c.isascii() for c in body) / max(len(body), 1) > 0.7 else 0
+                out.append({
+                    "title": it.get("title", ""),
+                    "link": it.get("href", ""),
+                    "snippet": body,
+                    "displayLink": urlparse(it.get("href", "")).netloc,
+                })
+            print(f"RAG fallback: got {len(out)} results ({english_count} English)")
+            # If DDG returned mostly non-English results, supplement with Wikipedia
+            if english_count < len(out) // 2:
+                print("RAG: DDG returned mostly non-English, adding Wikipedia results")
+                out = wikipedia_search(query, num)
+            return out
+        except Exception as e:
+            print(f"RAG fallback DuckDuckGo error (attempt {attempt+1}): {e}")
+    print("RAG: DuckDuckGo exhausted, falling back to Wikipedia")
+    return wikipedia_search(query, num)
+
+
 def google_cse_search(query: str, num: int = 5):
     api_key = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
     cse_id = os.getenv("GOOGLE_CSE_ID", "").strip()
 
     if not api_key or not cse_id:
-        print("RAG disabled: missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ID")
-        return []
+        print("RAG: Google CSE keys missing, using DuckDuckGo fallback")
+        return duckduckgo_search(query, num)
 
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
@@ -86,15 +170,30 @@ def google_cse_search(query: str, num: int = 5):
         "safe": "active",
     }
 
-    print(f"RAG searching: {query[:60]}...")
-    r = requests.get(url, params=params, timeout=20)
+    print(f"RAG searching (Google CSE): {query[:60]}...")
+    try:
+        r = requests.get(url, params=params, timeout=20)
+    except Exception as e:
+        print(f"RAG: Google CSE request failed ({e}), using DuckDuckGo fallback")
+        return duckduckgo_search(query, num)
+
     if r.status_code == 429:
-        print("RAG: rate limited (429)")
-        return []
-    r.raise_for_status()
+        print("RAG: Google CSE rate limited (429), using Wikipedia+DuckDuckGo fallback")
+        wiki = wikipedia_search(query, num)
+        return wiki if wiki else duckduckgo_search(query, num)
+
+    if not r.ok:
+        print(f"RAG: Google CSE error {r.status_code}, using Wikipedia+DuckDuckGo fallback")
+        wiki = wikipedia_search(query, num)
+        return wiki if wiki else duckduckgo_search(query, num)
 
     items = (r.json().get("items") or [])
-    print(f"RAG: got {len(items)} results")
+    if not items:
+        print("RAG: Google CSE returned 0 results, using Wikipedia+DuckDuckGo fallback")
+        wiki = wikipedia_search(query, num)
+        return wiki if wiki else duckduckgo_search(query, num)
+
+    print(f"RAG: Google CSE got {len(items)} results")
     out = []
     for it in items:
         out.append({
@@ -153,9 +252,11 @@ def ingest_web_evidence_for_claim(claim: str, num_results: int = 5, chunks_per_p
     if cache_key in _ingest_cache:
         return {"search_results": [], "added_chunks": 0, "rag_enabled": True, "cached": True}
 
-    _ingest_cache.add(cache_key)
-
     results = google_cse_search(claim, num=num_results)
+
+    # Only cache if search succeeded with results — so failed/empty searches can be retried
+    if results:
+        _ingest_cache.add(cache_key)
     new_docs = []
 
     for r in results:
@@ -281,19 +382,19 @@ def compute_hit_miss_stats(results: list) -> dict:
 # ==================================================
 def verify_claims_with_rag_google(claims, k=5, refresh_web=True):
     """
-    claims format expected:
-    [
-      {"claim": "...", "source_step_id": 1},
-      ...
-    ]
+    claims: list of strings OR list of dicts {"claim": "...", "source_step_id": 1}
     """
     results = []
 
     oversample_k = max(20, k * 4)
 
     for c in claims:
-        claim_text = c["claim"]
-        step_id = c.get("source_step_id", -1)
+        if isinstance(c, str):
+            claim_text = c
+            step_id = -1
+        else:
+            claim_text = c["claim"]
+            step_id = c.get("source_step_id", -1)
 
         api_key = os.getenv("GOOGLE_CSE_API_KEY", "").strip()
         cse_id = os.getenv("GOOGLE_CSE_ID", "").strip()

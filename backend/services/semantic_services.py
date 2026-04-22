@@ -40,6 +40,8 @@ def semantic_risk(prompt: str, threshold: float = 0.7):
             best_score = score
             best_category = category
 
+    print(f"[SEMANTIC] best_category={best_category}, best_score={best_score:.4f}, threshold={threshold}", flush=True)
+
     # Weak similarity → ignore semantics completely
     if best_score < threshold:
         return None, best_score

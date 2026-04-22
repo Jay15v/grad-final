@@ -17,6 +17,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _lastVerdict;
   String? _lastDisplayLabel;
   double? _lastAvgAgreement;
+  Map<String, String>? _lastModelStatuses;
 
   void _onPipelineUpdate(
     String pipelineId,
@@ -24,6 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
     String? verdict,
     String? displayLabel,
     double? avgAgreement,
+    Map<String, String>? modelStatuses,
   }) {
     setState(() {
       _lastPipelineId = pipelineId;
@@ -31,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _lastVerdict = verdict;
       _lastDisplayLabel = displayLabel;
       _lastAvgAgreement = avgAgreement;
+      _lastModelStatuses = modelStatuses;
     });
   }
 
@@ -57,6 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 verdict: _lastVerdict,
                 displayLabel: _lastDisplayLabel,
                 avgAgreement: _lastAvgAgreement,
+                modelStatuses: _lastModelStatuses,
               ),
             ),
           ],
@@ -86,6 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       verdict: _lastVerdict,
                       displayLabel: _lastDisplayLabel,
                       avgAgreement: _lastAvgAgreement,
+                      modelStatuses: _lastModelStatuses,
                     ),
                   ],
                 ),

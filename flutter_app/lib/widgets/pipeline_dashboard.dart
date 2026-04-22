@@ -13,6 +13,7 @@ class PipelineDashboard extends StatefulWidget {
   final String? verdict;
   final String? displayLabel;
   final double? avgAgreement;
+  final Map<String, String>? modelStatuses;
 
   const PipelineDashboard({
     super.key,
@@ -21,6 +22,7 @@ class PipelineDashboard extends StatefulWidget {
     this.verdict,
     this.displayLabel,
     this.avgAgreement,
+    this.modelStatuses,
   });
 
   @override
@@ -202,6 +204,7 @@ class _PipelineDashboardState extends State<PipelineDashboard> {
                     verdict: widget.verdict,
                     displayLabel: widget.displayLabel,
                     avgAgreement: widget.avgAgreement,
+                    modelStatuses: widget.modelStatuses,
                   ),
                 ],
 
@@ -253,8 +256,14 @@ class _CrossModelCard extends StatelessWidget {
   final String? verdict;
   final String? displayLabel;
   final double? avgAgreement;
+  final Map<String, String>? modelStatuses;
 
-  const _CrossModelCard({this.verdict, this.displayLabel, this.avgAgreement});
+  const _CrossModelCard({
+    this.verdict,
+    this.displayLabel,
+    this.avgAgreement,
+    this.modelStatuses,
+  });
 
   Color get _verdictColor {
     switch (verdict) {
@@ -266,19 +275,6 @@ class _CrossModelCard extends StatelessWidget {
         return const Color(0xFFDC2626);
       default:
         return const Color(0xFF6B7280);
-    }
-  }
-
-  String get _verdictIcon {
-    switch (verdict) {
-      case 'CONSENSUS':
-        return '✅';
-      case 'PARTIAL':
-        return '⚠️';
-      case 'DISAGREEMENT':
-        return '🔴';
-      default:
-        return '⏳';
     }
   }
 
@@ -322,27 +318,52 @@ class _CrossModelCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // Model rows — phi3, llama3, mistral
-          ...['phi3', 'llama3', 'mistral'].map((model) => Padding(
+          // Model rows — driven by real backend data
+          ...() {
+            final models = (modelStatuses != null && modelStatuses!.isNotEmpty)
+                ? modelStatuses!.entries.toList()
+                : [
+                    for (final m in ['phi3', 'llama3', 'mistral'])
+                      MapEntry(m, isReady ? 'ok' : 'pending')
+                  ];
+            return models.map((entry) {
+              final modelOk = entry.value == 'ok';
+              final icon = !isReady
+                  ? '⏳'
+                  : modelOk
+                      ? '✅'
+                      : '❌';
+              return Padding(
                 padding: const EdgeInsets.only(bottom: 5),
                 child: Row(
                   children: [
-                    Text(
-                      isReady ? _verdictIcon : '⏳',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    Text(icon, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 8),
                     Text(
-                      model,
+                      entry.key,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isReady ? Colors.white : AppColors.textMuted,
+                        color: !isReady
+                            ? AppColors.textMuted
+                            : modelOk
+                                ? Colors.white
+                                : AppColors.danger,
                         fontFamily: 'monospace',
                       ),
                     ),
+                    if (isReady && !modelOk) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '(unavailable)',
+                        style: TextStyle(
+                            fontSize: 10, color: AppColors.textMuted),
+                      ),
+                    ],
                   ],
                 ),
-              )),
+              );
+            });
+          }(),
 
           if (isReady) ...[
             const SizedBox(height: 8),

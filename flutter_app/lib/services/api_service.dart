@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
-const String _baseUrl = 'http://127.0.0.1:5000';
+const String _baseUrl = 'http://192.168.100.16:5000';
 
 class ChatResponse {
   final String decision;
@@ -15,6 +15,8 @@ class ChatResponse {
   final String? verdict;
   final String? displayLabel;
   final double? avgAgreement;
+  // Map of model name → "ok" | "error"
+  final Map<String, String>? modelStatuses;
 
   ChatResponse({
     required this.decision,
@@ -25,10 +27,15 @@ class ChatResponse {
     this.verdict,
     this.displayLabel,
     this.avgAgreement,
+    this.modelStatuses,
   });
 
   factory ChatResponse.fromJson(Map<String, dynamic> json) {
-    print("DEBUG flutter received: ${json['verdict']}");
+    Map<String, String>? statuses;
+    if (json['model_statuses'] is Map) {
+      statuses = (json['model_statuses'] as Map)
+          .map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
     return ChatResponse(
       decision: json['decision'] as String? ?? 'ALLOW',
       reply: json['reply'] as String?,
@@ -39,6 +46,7 @@ class ChatResponse {
       verdict: json['verdict'] as String?,
       displayLabel: json['display_label'] as String?,
       avgAgreement: (json['avg_agreement'] as num?)?.toDouble(),
+      modelStatuses: statuses,
     );
   }
 }

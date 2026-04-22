@@ -12,6 +12,7 @@ class ChatPanel extends StatefulWidget {
     String? verdict,
     String? displayLabel,
     double? avgAgreement,
+    Map<String, String>? modelStatuses,
   }) onPipelineUpdate;
 
   const ChatPanel({super.key, required this.onPipelineUpdate});
@@ -118,6 +119,7 @@ class _ChatPanelState extends State<ChatPanel> {
               verdict: response.verdict,
               displayLabel: response.displayLabel,
               avgAgreement: response.avgAgreement,
+              modelStatuses: response.modelStatuses,
             );
           }
         }

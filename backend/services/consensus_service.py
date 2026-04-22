@@ -11,8 +11,8 @@ from services.semantic_services import sbert
 from services.cross_model_service import query_all_models
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-THRESHOLD_CONSENSUS = 0.65
-THRESHOLD_PARTIAL   = 0.45
+THRESHOLD_CONSENSUS = 0.60   # lowered from 0.65 — greetings score ~0.65 despite genuine agreement
+THRESHOLD_PARTIAL   = 0.40   # lowered from 0.45 proportionally
 
 # ── Verdict labels ────────────────────────────────────────────────────────────
 VERDICT_LABELS = {
@@ -107,8 +107,6 @@ def cross_model_validate(prompt: str) -> dict:
           - responses     (dict) : Raw {model: response_or_error} from query_all_models
     """
     responses = query_all_models(prompt)
-    for model, text in responses.items():
-        print(f"DEBUG {model}: {text[:80]}")
 
     # ── Filter valid responses ────────────────────────────────────────────────
     valid = {
@@ -146,10 +144,17 @@ def cross_model_validate(prompt: str) -> dict:
     else:
         verdict = "DISAGREEMENT"
 
+    # ── Per-model availability map (for UI display) ───────────────────────────
+    model_statuses = {
+        model: ("error" if _is_error(text) else "ok")
+        for model, text in responses.items()
+    }
+
     return {
-        "verdict":       verdict,
-        "display_label": VERDICT_LABELS[verdict],
-        "avg_agreement": avg_agreement,
-        "pairs":         pairs,
-        "responses":     responses,
+        "verdict":        verdict,
+        "display_label":  VERDICT_LABELS[verdict],
+        "avg_agreement":  avg_agreement,
+        "pairs":          pairs,
+        "responses":      responses,
+        "model_statuses": model_statuses,
     }

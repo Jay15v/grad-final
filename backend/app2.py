@@ -103,6 +103,8 @@ def _defense_check(message: str) -> dict:
         final_risk = max(bert_risk * 1.4, 0.65)
     elif semantic_domain == "direct_harm":
         final_risk = max(bert_risk * 1.2, 0.40)
+    elif semantic_domain == "parental_control_bypass":
+        final_risk = max(bert_risk * 1.2, 0.40)
 
     if final_risk >= BLOCK_THRESHOLD:
         decision = "BLOCK"
@@ -125,6 +127,7 @@ def _defense_check(message: str) -> dict:
 # ------------------------------------------------------------------
 def _run_pipeline(pipeline_id: str, message: str):
     entry = pipeline_store[pipeline_id]
+    print(f"[PIPELINE] Starting for message: {message[:60]!r}", flush=True)
 
     # Stage 1 – decomposition
     try:
@@ -157,11 +160,13 @@ def _run_pipeline(pipeline_id: str, message: str):
     # Stage 4 – RAG
     try:
         entry["stages"]["rag"] = {"status": "running"}
+        print(f"[RAG] RAG_ENABLED={RAG_ENABLED}, claims_count={len(claims)}", flush=True)
         if claims and RAG_ENABLED:
             rag_results = verify_claims_with_rag_google(claims, k=5, refresh_web=True) or {
                 "results": [], "rag_eval": {"total_steps": 0, "hits": 0, "misses": 0, "hit_rate": 0.0}
             }
         else:
+            print(f"[RAG] Skipped — RAG_ENABLED={RAG_ENABLED}, claims={claims}", flush=True)
             rag_results = {
                 "results": [],
                 "rag_eval": {"total_steps": 0, "hits": 0, "misses": 0, "hit_rate": 0.0},
@@ -279,19 +284,17 @@ def chat():
     )
     thread.start()
 
-    verdict = consensus_result["verdict"] if consensus_result else None
-    display_label = consensus_result["display_label"] if consensus_result else None
-    print(f"DEBUG response JSON: verdict={verdict}, display_label={display_label}")
     return jsonify({
-        "decision": decision,
-        "reply": reply,
-        "defense_meta": defense,
-        "pipeline_id": pipeline_id,
-        "case_id": case_id,
-        "rlhf_pending": rlhf_pending,
-        "verdict": verdict,
-        "display_label": display_label,
-        "avg_agreement": consensus_result["avg_agreement"] if consensus_result else None,
+        "decision":       decision,
+        "reply":          reply,
+        "defense_meta":   defense,
+        "pipeline_id":    pipeline_id,
+        "case_id":        case_id,
+        "rlhf_pending":   rlhf_pending,
+        "verdict":        consensus_result["verdict"]        if consensus_result else None,
+        "display_label":  consensus_result["display_label"]  if consensus_result else None,
+        "avg_agreement":  consensus_result["avg_agreement"]  if consensus_result else None,
+        "model_statuses": consensus_result["model_statuses"] if consensus_result else None,
     })
 
 
@@ -303,6 +306,11 @@ def get_pipeline(pipeline_id):
     entry = pipeline_store.get(pipeline_id)
     if entry is None:
         return jsonify({"error": "Pipeline not found"}), 404
+    if entry.get("status") == "done":
+        rag_stage = entry.get("stages", {}).get("rag", {})
+        rag_data = rag_stage.get("data", {})
+        rag_results_list = rag_data.get("results", [])
+        print(f"[PIPELINE DONE] rag_results_count={len(rag_results_list)}, rag_error={rag_stage.get('error')}", flush=True)
     return jsonify(entry)
 
 
@@ -436,4 +444,4 @@ if __name__ == "__main__":
         methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
         print(f"  {str(rule):40} [{methods}]")
     print("="*60 + "\n")
-    app.run(debug=False, host="0.0.0.0", port=5001)
+    app.run(debug=False, host="0.0.0.0", port=5000)
