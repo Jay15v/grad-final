@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/defense_meta.dart';
 import '../models/pipeline_state.dart';
 
-const String _baseUrl = 'http://192.168.100.16:5000';
+const String _baseUrl = 'http://10.0.2.2:5000';
 
 class ChatResponse {
   final String decision;
@@ -99,7 +99,7 @@ class ApiService {
           },
           body: jsonEncode({'message': message, 'history': history}),
         )
-        .timeout(const Duration(seconds: 120));
+        .timeout(const Duration(seconds: 150));
 
     if (response.statusCode != 200) {
       throw Exception('Backend error: ${response.statusCode}');

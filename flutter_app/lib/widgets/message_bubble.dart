@@ -158,12 +158,26 @@ class _BlockedBubble extends StatelessWidget {
 
 // ─── Assistant bubble ────────────────────────────────────────────────────────
 
-class _AssistantBubble extends StatelessWidget {
+class _AssistantBubble extends StatefulWidget {
   final ChatMessage message;
   const _AssistantBubble({required this.message});
 
   @override
+  State<_AssistantBubble> createState() => _AssistantBubbleState();
+}
+
+class _AssistantBubbleState extends State<_AssistantBubble> {
+  static const int _collapseThreshold = 400;
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final msg = widget.message;
+    final isLong = msg.content.length > _collapseThreshold;
+    final displayText = (isLong && !_expanded)
+        ? '${msg.content.substring(0, _collapseThreshold).trimRight()}…'
+        : msg.content;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -171,22 +185,19 @@ class _AssistantBubble extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.smart_toy_outlined,
-                  size: 13, color: AppColors.accent),
+              Icon(Icons.smart_toy_outlined, size: 13, color: AppColors.accent),
               const SizedBox(width: 4),
               Text('AegisMind',
-                  style: TextStyle(
-                      fontSize: 11, color: AppColors.textMuted)),
-              if (message.decision != null) ...[
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+              if (msg.decision != null) ...[
                 const SizedBox(width: 6),
-                _DecisionChip(decision: message.decision!),
+                _DecisionChip(decision: msg.decision!),
               ],
             ],
           ),
           const SizedBox(height: 4),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: AppColors.surface,
               border: Border.all(color: AppColors.border),
@@ -197,7 +208,7 @@ class _AssistantBubble extends StatelessWidget {
                 bottomRight: Radius.circular(16),
               ),
             ),
-            child: message.isLoading
+            child: msg.isLoading
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -215,19 +226,38 @@ class _AssistantBubble extends StatelessWidget {
                               color: AppColors.textMuted, fontSize: 13)),
                     ],
                   )
-                : Text(
-                    message.content,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13, height: 1.5),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayText,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 13, height: 1.5),
+                      ),
+                      if (isLong) ...[
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () => setState(() => _expanded = !_expanded),
+                          child: Text(
+                            _expanded ? 'Show less' : 'Show more',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
           ),
-          if (message.defenseMeta != null && !message.isLoading) ...[
+          if (msg.defenseMeta != null && !msg.isLoading) ...[
             const SizedBox(height: 4),
-            _DefenseBadge(meta: message.defenseMeta!),
+            _DefenseBadge(meta: msg.defenseMeta!),
           ],
-          if (message.verdict != null && !message.isLoading) ...[
+          if (msg.verdict != null && !msg.isLoading) ...[
             const SizedBox(height: 4),
-            VerdictBanner(verdict: message.verdict!),
+            VerdictBanner(verdict: msg.verdict!),
           ],
         ],
       ),

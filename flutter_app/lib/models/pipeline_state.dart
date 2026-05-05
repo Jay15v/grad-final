@@ -46,8 +46,19 @@ class PipelineStages {
 class PipelineState {
   final String status; // 'idle' | 'running' | 'done' | 'error'
   final PipelineStages stages;
+  final String? verdict;
+  final String? displayLabel;
+  final double? avgAgreement;
+  final Map<String, String>? modelStatuses;
 
-  PipelineState({required this.status, required this.stages});
+  PipelineState({
+    required this.status,
+    required this.stages,
+    this.verdict,
+    this.displayLabel,
+    this.avgAgreement,
+    this.modelStatuses,
+  });
 
   bool get isDone => status == 'done' || status == 'error';
 
@@ -55,11 +66,20 @@ class PipelineState {
       PipelineState(status: 'idle', stages: PipelineStages());
 
   factory PipelineState.fromJson(Map<String, dynamic> json) {
+    Map<String, String>? statuses;
+    if (json['model_statuses'] is Map) {
+      statuses = (json['model_statuses'] as Map)
+          .map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
     return PipelineState(
       status: json['status'] as String? ?? 'running',
       stages: json['stages'] != null
           ? PipelineStages.fromJson(json['stages'] as Map<String, dynamic>)
           : PipelineStages(),
+      verdict: json['verdict'] as String?,
+      displayLabel: json['display_label'] as String?,
+      avgAgreement: (json['avg_agreement'] as num?)?.toDouble(),
+      modelStatuses: statuses,
     );
   }
 }

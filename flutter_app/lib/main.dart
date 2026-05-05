@@ -306,8 +306,10 @@ class _AppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    return SafeArea(
+      bottom: false,
+      child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.bgSurface.withOpacity(0.95),
         border: Border(
@@ -318,8 +320,8 @@ class _AppBar extends StatelessWidget {
         children: [
           // Logo
           Container(
-            width: 36,
-            height: 36,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               gradient: AppColors.accentGradient,
               borderRadius: BorderRadius.circular(8),
@@ -336,29 +338,19 @@ class _AppBar extends StatelessWidget {
                   style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 18)),
+                      fontSize: 16)),
             ),
           ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('AegisMind',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
-              Text('When Defense Meets Reasoning',
-                  style: TextStyle(
-                      color: AppColors.accent.withOpacity(0.8),
-                      fontSize: 10)),
-            ],
-          ),
+          const SizedBox(width: 8),
+          const Text('AegisMind',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15)),
           const Spacer(),
-          // Mode toggle
+          // Mode toggle — icons only to save space on mobile
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               color: AppColors.surface.withOpacity(0.6),
               border:
@@ -374,9 +366,9 @@ class _AppBar extends StatelessWidget {
                   selected: selectedIndex == 0,
                   onTap: () => onTabChanged(0),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 _TabButton(
-                  label: 'Analyzer',
+                  label: 'Analyze',
                   icon: Icons.manage_search_outlined,
                   selected: selectedIndex == 1,
                   onTap: () => onTabChanged(1),
@@ -432,7 +424,8 @@ class _AppBar extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),  // Container
+    );  // SafeArea
   }
 }
 
@@ -455,8 +448,7 @@ class _TabButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           gradient: selected ? AppColors.accentGradient : null,
           color: selected ? null : Colors.transparent,
@@ -470,20 +462,11 @@ class _TabButton extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 14,
-                color: selected ? Colors.white : AppColors.textMuted),
-            const SizedBox(width: 5),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color:
-                        selected ? Colors.white : AppColors.textMuted)),
-          ],
+        child: Tooltip(
+          message: label,
+          child: Icon(icon,
+              size: 16,
+              color: selected ? Colors.white : AppColors.textMuted),
         ),
       ),
     );

@@ -2,6 +2,48 @@ import 'package:flutter/material.dart';
 import '../models/pipeline_state.dart';
 import 'app_colors.dart';
 
+class _ExpandableText extends StatefulWidget {
+  final String text;
+  final int maxChars;
+  final TextStyle? style;
+  const _ExpandableText({required this.text, this.maxChars = 200, this.style});
+
+  @override
+  State<_ExpandableText> createState() => _ExpandableTextState();
+}
+
+class _ExpandableTextState extends State<_ExpandableText> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLong = widget.text.length > widget.maxChars;
+    final display = (isLong && !_expanded)
+        ? _sentenceTrim(widget.text, widget.maxChars)
+        : widget.text;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(display, style: widget.style),
+        if (isLong)
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                _expanded ? 'Show less' : 'Show more',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class StageCard extends StatefulWidget {
   final String title;
   final IconData icon;
@@ -203,41 +245,49 @@ class ReasoningContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: items.map((item) {
         final stepId = item['step_id'];
-        final reasoning = item['reasoning'] as String? ?? '';
-        final preview = reasoning.length > 220
-            ? '${reasoning.substring(0, 220)}…'
-            : reasoning;
+        final reasoning = (item['reasoning'] as String? ?? '').trim();
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: 'Step $stepId — ',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w600),
-                ),
-                TextSpan(
-                  text: preview.isEmpty ? 'No reasoning generated' : preview,
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: preview.isEmpty
-                          ? AppColors.textMuted
-                          : const Color(0xFFCBD5E1),
-                      fontStyle: preview.isEmpty
-                          ? FontStyle.italic
-                          : FontStyle.normal,
-                      height: 1.4),
-                ),
-              ],
-            ),
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Step $stepId',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              reasoning.isEmpty
+                  ? Text('No reasoning generated',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                          fontStyle: FontStyle.italic))
+                  : _ExpandableText(
+                      text: reasoning,
+                      maxChars: 200,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFCBD5E1),
+                          height: 1.4),
+                    ),
+            ],
           ),
         );
       }).toList(),
     );
   }
+}
+
+String _sentenceTrim(String text, int maxChars) {
+  if (text.length <= maxChars) return text;
+  final sub = text.substring(0, maxChars);
+  final lastEnd = sub.lastIndexOf(RegExp(r'[.!?]'));
+  if (lastEnd > maxChars ~/ 2) return sub.substring(0, lastEnd + 1);
+  final lastSpace = sub.lastIndexOf(' ');
+  return lastSpace > 0 ? '${sub.substring(0, lastSpace)}…' : '$sub…';
 }
 
 class RagContent extends StatelessWidget {
@@ -267,11 +317,10 @@ class RagContent extends StatelessWidget {
         ...results.take(6).map((r) {
           final verdict = r['verdict'] as String? ?? '';
           final claim = r['claim'] as String? ?? '';
-          final source =
-              (r['best_evidence'] as Map?)?['source'] as String?;
-          final preview =
-              claim.length > 120 ? '${claim.substring(0, 120)}…' : claim;
-
+          final bestEvidence = r['best_evidence'] as Map?;
+          final source = bestEvidence?['source'] as String?;
+          final similarity = (bestEvidence?['similarity'] as num?)?.toDouble();
+          final coverage = (bestEvidence?['coverage'] as num?)?.toDouble();
           IconData icon;
           Color color;
           String label;
@@ -326,12 +375,26 @@ class RagContent extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (similarity != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        'sim ${(similarity * 100).round()}%',
+                        style: TextStyle(fontSize: 10, color: AppColors.accent),
+                      ),
+                    ],
+                    if (coverage != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        'cov ${(coverage * 100).round()}%',
+                        style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
-                // Claim text
-                Text(
-                  preview,
+                _ExpandableText(
+                  text: claim,
+                  maxChars: 180,
                   style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFFCBD5E1),

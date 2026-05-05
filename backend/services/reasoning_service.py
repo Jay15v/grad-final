@@ -1,69 +1,59 @@
-from services.llm_service import call_phi3
 import re
+import requests
+
+_OLLAMA_URL = "http://localhost:11434/api/generate"
+
+
+def _call_phi3_long(prompt: str) -> str:
+    """Single phi3 call for batched reasoning. 300 tokens ≈ 3 steps × 2 sentences."""
+    try:
+        resp = requests.post(
+            _OLLAMA_URL,
+            json={
+                "model": "phi3",
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.0, "top_p": 0.9, "num_predict": 300},
+            },
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return resp.json().get("response", "")
+    except Exception as e:
+        print(f"⚠️ Phi-3 batch error: {e}")
+        return ""
 
 
 def generate_reasoning_from_steps(steps: list, original_prompt: str) -> list:
-    """
-    Uses Phi-3 to generate grounded, structured reasoning per step.
+    if not steps:
+        return []
 
-    Output format:
-    [
-      {"step_id": 1, "reasoning": "Explanation text..."},
-      ...
-    ]
+    steps = steps[:3]  # 3 steps × ~2 sentences ≈ 250 tokens, well within limit
 
-    This implementation is resilient:
-    - Never throws if the LLM call fails
-    - Always returns a list (even if some steps fail)
-    """
+    numbered = "\n".join(
+        f"{s.get('id', i + 1)}. {s.get('text', '')}"
+        for i, s in enumerate(steps)
+    )
 
-    reasoning_results = []
+    prompt = (
+        f'You are a scientific reasoning assistant.\n\n'
+        f'Original question: "{original_prompt}"\n\n'
+        f'For each numbered subtask below write exactly 2 sentences. '
+        f'Start each answer with its number followed by a period.\n\n'
+        f'{numbered}'
+    )
 
+    raw = _call_phi3_long(prompt)
+
+    results = []
     for step in steps:
-        step_id = step.get("id", -1)
-        step_text = step.get("text", "")
+        sid = step.get("id", -1)
+        pattern = rf"(?:^|\n)\s*{sid}\.\s*(.*?)(?=\n\s*\d+\.|\Z)"
+        match = re.search(pattern, raw, re.DOTALL)
+        text = match.group(1).strip() if match else ""
+        results.append({"step_id": sid, "reasoning": text})
 
-        prompt = f"""
-You are an expert scientific reasoning assistant.
-
-Original question:
-"{original_prompt}"
-
-Current subtask:
-"{step_text}"
-
-Rules:
-- Answer ONLY in the context of the original question
-- Do NOT introduce unrelated phenomena
-- Do NOT generalize beyond the topic
-- Do NOT restate the instruction
-- Be scientifically accurate
-- Write 2–4 clear sentences
-""".strip()
-
-        explanation = ""
-        try:
-            resp = call_phi3(prompt)
-
-            # Normalize bad returns safely
-            if resp is None:
-                resp = ""
-            if not isinstance(resp, str):
-                resp = str(resp)
-
-            explanation = resp.strip()
-
-        except Exception as e:
-            # Keep pipeline alive even if Phi-3 fails
-            print(f"⚠️ Phi-3 error at step {step_id}: {e}")
-            explanation = ""
-
-        reasoning_results.append({
-            "step_id": step_id,
-            "reasoning": explanation
-        })
-
-    return reasoning_results
+    return results
 
 
 def normalize_claim_for_retrieval(claim: str) -> str:
@@ -132,20 +122,13 @@ def generate_claims_from_reasoning(reasoning) -> list:
             return False
 
         return True
+
     def clean_text_artifacts(text: str) -> str:
-    # Fix merged possessives like "Earth'seloft"
-         text = re.sub(r"([a-zA-Z])'s([a-zA-Z])", r"\1's \2", text)
-
-    # Remove weird token concatenations (e.g., sunrdiscovery)
-         text = re.sub(r"\b([a-z]{4,})([A-Z][a-z]+)\b", r"\1 \2", text)
-
-    # Remove repeated non-word characters
-         text = re.sub(r"[^\w\s\-\.,;:']", " ", text)
-
-    # Normalize spacing
-         text = re.sub(r"\s+", " ", text).strip()
-
-         return text
+        text = re.sub(r"([a-zA-Z])'s([a-zA-Z])", r"\1's \2", text)
+        text = re.sub(r"\b([a-z]{4,})([A-Z][a-z]+)\b", r"\1 \2", text)
+        text = re.sub(r"[^\w\s\-\.,;:']", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
 
 
     # Normalize reasoning into list of items: [{"step_id":..., "reasoning":...}, ...]

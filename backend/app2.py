@@ -96,9 +96,9 @@ def _defense_check(message: str) -> dict:
     elif semantic_domain == "virtualization_hypotheticals":
         final_risk = bert_risk * 0.6
     elif semantic_domain == "violence_intent":
-        final_risk = max(bert_risk * 1.5, 0.45)
+        final_risk = max(bert_risk * 1.5, 0.65)
     elif semantic_domain == "self_harm":
-        final_risk = max(bert_risk * 1.5, 0.45)
+        final_risk = max(bert_risk * 1.5, 0.65)  # always block self-harm
     elif semantic_domain == "dangerous_weapons":
         final_risk = max(bert_risk * 1.4, 0.65)
     elif semantic_domain == "direct_harm":
@@ -125,7 +125,23 @@ def _defense_check(message: str) -> dict:
 # ------------------------------------------------------------------
 # Helper: run full pipeline in a background thread
 # ------------------------------------------------------------------
-def _run_pipeline(pipeline_id: str, message: str):
+def _run_consensus(entry: dict, message: str, child_id: str):
+    """Runs cross-model consensus after pipeline stages. Sets status='done' when complete."""
+    try:
+        consensus_result = cross_model_validate(message)
+        entry["verdict"]        = consensus_result.get("verdict")
+        entry["display_label"]  = consensus_result.get("display_label")
+        entry["avg_agreement"]  = consensus_result.get("avg_agreement")
+        entry["model_statuses"] = consensus_result.get("model_statuses")
+        if consensus_result.get("verdict") == "DISAGREEMENT":
+            notify_parent_if_needed(child_id, message, consensus_result)
+    except Exception as e:
+        logging.warning(f"consensus validation failed: {e}")
+    finally:
+        entry["status"] = "done"  # Flutter stops polling only after consensus finishes
+
+
+def _run_pipeline(pipeline_id: str, message: str, child_id: str = "anonymous"):
     entry = pipeline_store[pipeline_id]
     print(f"[PIPELINE] Starting for message: {message[:60]!r}", flush=True)
 
@@ -179,7 +195,14 @@ def _run_pipeline(pipeline_id: str, message: str):
             "error": str(e),
         }
 
-    entry["status"] = "done"
+    # Pipeline stages done — keep status as "pipeline_done" so Flutter keeps polling
+    # while consensus runs. Consensus will set status to "done" when it finishes.
+    entry["status"] = "pipeline_done"
+
+    # Cross-model runs AFTER pipeline so it doesn't compete with reasoning for Ollama
+    threading.Thread(
+        target=_run_consensus, args=(entry, message, child_id), daemon=True
+    ).start()
 
 
 # ------------------------------------------------------------------
@@ -264,22 +287,13 @@ def chat():
     # 2. Ollama chat reply
     reply = call_ollama_chat(message, history)
 
-    # 3. Cross-model consensus validation
-    consensus_result = None
-    try:
-        consensus_result = cross_model_validate(message)
-        if consensus_result.get("verdict") == "DISAGREEMENT":
-            notify_parent_if_needed(child_id or "anonymous", message, consensus_result)
-    except Exception as e:
-        logging.warning(f"consensus validation failed: {e}")
-
-    # 4. Start background pipeline
+    # 3. Start background pipeline (includes consensus validation)
     pipeline_id = str(uuid.uuid4())
-    pipeline_store[pipeline_id] = {"status": "running", "stages": {}}
+    pipeline_store[pipeline_id] = {"status": "running", "stages": {}, "verdict": None, "display_label": None, "avg_agreement": None, "model_statuses": None}
 
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(pipeline_id, message),
+        args=(pipeline_id, message, child_id or "anonymous"),
         daemon=True,
     )
     thread.start()
@@ -291,10 +305,10 @@ def chat():
         "pipeline_id":    pipeline_id,
         "case_id":        case_id,
         "rlhf_pending":   rlhf_pending,
-        "verdict":        consensus_result["verdict"]        if consensus_result else None,
-        "display_label":  consensus_result["display_label"]  if consensus_result else None,
-        "avg_agreement":  consensus_result["avg_agreement"]  if consensus_result else None,
-        "model_statuses": consensus_result["model_statuses"] if consensus_result else None,
+        "verdict":        None,
+        "display_label":  None,
+        "avg_agreement":  None,
+        "model_statuses": None,
     })
 
 

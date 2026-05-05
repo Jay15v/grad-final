@@ -45,10 +45,10 @@ def fuse_prompt(prompt: str):
         final_risk = bert_risk * 0.6
 
     elif semantic_domain == "violence_intent":
-        final_risk = max(bert_risk * 1.5, 0.45)
+        final_risk = max(bert_risk * 1.5, 0.65)
 
     elif semantic_domain == "self_harm":
-        final_risk = max(bert_risk * 1.5, 0.45)
+        final_risk = max(bert_risk * 1.5, 0.65)  # always block self-harm
 
     elif semantic_domain == "dangerous_weapons":
         final_risk = max(bert_risk * 1.4, 0.65)

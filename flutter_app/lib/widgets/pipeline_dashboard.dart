@@ -35,6 +35,14 @@ class _PipelineDashboardState extends State<PipelineDashboard> {
   String? _lastId;
 
   @override
+  void initState() {
+    super.initState();
+    // Start polling immediately on mount in case the user switched to this tab
+    // after a pipelineId was already set (didUpdateWidget won't fire in that case).
+    _startPolling(widget.pipelineId);
+  }
+
+  @override
   void didUpdateWidget(PipelineDashboard old) {
     super.didUpdateWidget(old);
     if (widget.pipelineId != old.pipelineId) {
@@ -201,10 +209,10 @@ class _PipelineDashboardState extends State<PipelineDashboard> {
                   ),
                   const SizedBox(height: 8),
                   _CrossModelCard(
-                    verdict: widget.verdict,
-                    displayLabel: widget.displayLabel,
-                    avgAgreement: widget.avgAgreement,
-                    modelStatuses: widget.modelStatuses,
+                    verdict: widget.verdict ?? _pipeline.verdict,
+                    displayLabel: widget.displayLabel ?? _pipeline.displayLabel,
+                    avgAgreement: widget.avgAgreement ?? _pipeline.avgAgreement,
+                    modelStatuses: widget.modelStatuses ?? _pipeline.modelStatuses,
                   ),
                 ],
 

@@ -220,14 +220,21 @@ def fetch_page_text(url: str, max_chars: int = 12000) -> str:
 
 
 def chunk_text(text: str, chunk_size: int = 220, overlap: int = 40):
+    """Split text into word-capped chunks that end on a sentence boundary."""
     words = text.split()
     if not words:
         return []
     chunks = []
     i = 0
     while i < len(words):
-        chunk = words[i:i + chunk_size]
-        chunks.append(" ".join(chunk))
+        raw = " ".join(words[i:i + chunk_size])
+        # Trim to last sentence-ending punctuation so chunks don't cut mid-sentence
+        for end_char in ('.', '!', '?'):
+            pos = raw.rfind(end_char)
+            if pos > len(raw) // 2:
+                raw = raw[:pos + 1]
+                break
+        chunks.append(raw)
         i += max(1, chunk_size - overlap)
     return chunks
 

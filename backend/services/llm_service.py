@@ -41,7 +41,7 @@ def call_ollama_chat(message: str, history: list = None) -> str:
 
     try:
         print(f"[OLLAMA] Sending request to {OLLAMA_CHAT_URL} with model={MODEL_NAME}")
-        resp = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=120)
+        resp = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=90)
         print(f"[OLLAMA] Response status: {resp.status_code}")
         print(f"[OLLAMA] Response body: {resp.text[:500]}")
         resp.raise_for_status()

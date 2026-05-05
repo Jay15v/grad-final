@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../services/api_service.dart';
-import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/app_colors.dart';
-import '../main.dart' show HomeShell;
+import '../main.dart' show HomeShell, AuthGate;
 
 class ParentHomeScreen extends StatefulWidget {
   const ParentHomeScreen({super.key});
@@ -18,7 +17,6 @@ class ParentHomeScreen extends StatefulWidget {
 
 class _ParentHomeScreenState extends State<ParentHomeScreen>
     with TickerProviderStateMixin {
-  final _authService = AuthService();
   final _firestoreService = FirestoreService();
 
   List<Map<String, dynamic>> _pendingCases = [];
@@ -41,14 +39,12 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     super.dispose();
   }
 
-  Future<void> _signOut() async => _authService.signOut();
-
   Future<void> fetchPendingCases() async {
     setState(() => _loadingPending = true);
     try {
       final token = await ApiService.getIdToken();
       final response = await http.get(
-        Uri.parse('http://127.0.0.1:5000/api/pending'),
+        Uri.parse('http://10.0.2.2:5000/api/pending'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -75,7 +71,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     try {
       final token = await ApiService.getIdToken();
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:5000/api/feedback/$caseId'),
+        Uri.parse('http://10.0.2.2:5000/api/feedback/$caseId'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -407,7 +403,40 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
           IconButton(
             icon: Icon(Icons.logout, color: AppColors.textMuted, size: 20),
             tooltip: 'Sign out',
-            onPressed: _signOut,
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.bgSurface,
+                  title: const Text('Sign out',
+                      style: TextStyle(color: Colors.white, fontSize: 15)),
+                  content: Text('Are you sure you want to sign out?',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 13)),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: Text('Cancel',
+                          style: TextStyle(color: AppColors.textMuted)),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text('Sign out',
+                          style: TextStyle(color: AppColors.danger)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await FirebaseAuth.instance.signOut();
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const AuthGate()),
+                    (_) => false,
+                  );
+                }
+              }
+            },
           ),
         ],
       ),
