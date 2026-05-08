@@ -24,7 +24,7 @@ semantic_embeddings = {
 print("✅ Semantic service ready")
 
 
-def semantic_risk(prompt: str, threshold: float = 0.7):
+def semantic_risk(prompt: str, threshold: float = 0.55):
     """
     Returns semantic context ONLY.
     No risk scoring here.
@@ -39,6 +39,8 @@ def semantic_risk(prompt: str, threshold: float = 0.7):
         if score > best_score:
             best_score = score
             best_category = category
+
+    print(f"[SEMANTIC] best_category={best_category}, best_score={best_score:.4f}, threshold={threshold}", flush=True)
 
     # Weak similarity → ignore semantics completely
     if best_score < threshold:

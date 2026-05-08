@@ -18,7 +18,17 @@ __pycache__/
 
 # Environment & secrets
 .env
+backend/serviceAccount.json
+backend/services/serviceAccount.json
+backend/adaptive_cases.db
+*.db
 
 # OS
 .DS_Store
 Thumbs.db
+backend.rar
+flutter_app.rar
+
+# Model files — never commit these
+backend/models/
+backend/models/*.zip
