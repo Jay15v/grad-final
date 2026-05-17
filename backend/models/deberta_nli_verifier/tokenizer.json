@@ -2,11 +2,18 @@
   "version": "1.0",
   "truncation": {
     "direction": "Right",
-    "max_length": 256,
+    "max_length": 512,
     "strategy": "LongestFirst",
     "stride": 0
   },
-  "padding": null,
+  "padding": {
+    "strategy": "BatchLongest",
+    "direction": "Right",
+    "pad_to_multiple_of": null,
+    "pad_id": 0,
+    "pad_type_id": 0,
+    "pad_token": "[PAD]"
+  },
   "added_tokens": [
     {
       "id": 0,
@@ -14,7 +21,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": false,
+      "normalized": true,
       "special": true
     },
     {
@@ -23,7 +30,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": false,
+      "normalized": true,
       "special": true
     },
     {
@@ -32,7 +39,7 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": false,
+      "normalized": true,
       "special": true
     },
     {
@@ -41,16 +48,16 @@
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
-      "normalized": false,
+      "normalized": true,
       "special": true
     },
     {
       "id": 50264,
       "content": "[MASK]",
       "single_word": false,
-      "lstrip": false,
+      "lstrip": true,
       "rstrip": false,
-      "normalized": false,
+      "normalized": true,
       "special": true
     }
   ],
@@ -93,12 +100,6 @@
       {
         "Sequence": {
           "id": "A",
-          "type_id": 0
-        }
-      },
-      {
-        "SpecialToken": {
-          "id": "[SEP]",
           "type_id": 0
         }
       },

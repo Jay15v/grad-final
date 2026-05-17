@@ -6,25 +6,14 @@ import 'package:http/http.dart' as http;
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/api_config.dart';
 import '../models/message.dart';
-import '../models/defense_meta.dart';
 import '../services/api_service.dart';
 import 'message_bubble.dart';
 import 'app_colors.dart';
 
 class ChatPanel extends StatefulWidget {
-  final void Function(
-    String pipelineId,
-    DefenseMeta meta, {
-    String? verdict,
-    String? displayLabel,
-    double? avgAgreement,
-    Map<String, String>? modelStatuses,
-  }) onPipelineUpdate;
-
-  const ChatPanel({super.key, required this.onPipelineUpdate});
+  const ChatPanel({super.key});
 
   @override
   State<ChatPanel> createState() => _ChatPanelState();
@@ -49,19 +38,21 @@ class _ChatPanelState extends State<ChatPanel> {
   bool _isTranscribing = false;
   bool _stopRequested = false;
 
-  bool _hasAiResponded = false;
-  bool _feedbackSubmitted = false;
   final String _sessionId =
       'session_${DateTime.now().millisecondsSinceEpoch}';
-  String? _currentPipelineId;
-  String? _currentVerdict;
-  String? _lastUserMessage;
+  final Set<String> _blockedMsgIds = {};
+
+  // per-message rating state: aiMsgId → 'good' | 'bad'
+  final Map<String, String> _messageRatings = {};
+  // aiMsgId → the user prompt that triggered that response
+  final Map<String, String> _msgPrompts = {};
 
   List<Map<String, String>> get _history {
     return _messages
         .where((m) =>
             (m.role == MessageRole.user || m.role == MessageRole.assistant) &&
-            !m.isLoading)
+            !m.isLoading &&
+            !_blockedMsgIds.contains(m.id))
         .take(10)
         .map((m) => {
               'role': m.role == MessageRole.assistant ? 'assistant' : 'user',
@@ -90,7 +81,6 @@ class _ChatPanelState extends State<ChatPanel> {
     setState(() {
       _isSending = true;
       _rlhfPending = false;
-      _lastUserMessage = text;
     });
 
     final userMsgId = UniqueKey().toString();
@@ -115,8 +105,8 @@ class _ChatPanelState extends State<ChatPanel> {
         _rlhfPending = response.rlhfPending;
         _messages.removeWhere((m) => m.id == loadingMsgId);
 
-        _hasAiResponded = true;
         if (response.decision == 'BLOCK') {
+          _blockedMsgIds.add(userMsgId);
           _messages.add(ChatMessage(
             id: UniqueKey().toString(),
             role: MessageRole.blocked,
@@ -124,12 +114,11 @@ class _ChatPanelState extends State<ChatPanel> {
             decision: 'BLOCK',
             defenseMeta: response.defenseMeta,
           ));
-          widget.onPipelineUpdate('blocked-$userMsgId', response.defenseMeta);
         } else {
-          _currentPipelineId = response.pipelineId;
-          _currentVerdict = response.verdict;
+          final aiMsgId = UniqueKey().toString();
+          _msgPrompts[aiMsgId] = text;
           _messages.add(ChatMessage(
-            id: UniqueKey().toString(),
+            id: aiMsgId,
             role: MessageRole.assistant,
             content: response.reply ?? '(no response)',
             decision: response.decision,
@@ -137,16 +126,6 @@ class _ChatPanelState extends State<ChatPanel> {
             pipelineId: response.pipelineId,
             verdict: response.verdict,
           ));
-          if (response.pipelineId != null) {
-            widget.onPipelineUpdate(
-              response.pipelineId!,
-              response.defenseMeta,
-              verdict: response.verdict,
-              displayLabel: response.displayLabel,
-              avgAgreement: response.avgAgreement,
-              modelStatuses: response.modelStatuses,
-            );
-          }
         }
       });
     } catch (e) {
@@ -280,96 +259,83 @@ class _ChatPanelState extends State<ChatPanel> {
         .showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // ── Session feedback ───────────────────────────────────────────────────────
+  // ── Per-message rating ─────────────────────────────────────────────────────
 
-  Future<void> _submitFeedback(String rating) async {
-    final user = FirebaseAuth.instance.currentUser;
-    final userId = user?.uid ?? 'anonymous';
+  Future<void> _rateMessage(String msgId, String rating) async {
+    if (_messageRatings.containsKey(msgId)) return;
+    setState(() => _messageRatings[msgId] = rating);
 
-    setState(() => _feedbackSubmitted = true);
+    final userPrompt = _msgPrompts[msgId] ?? '';
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
 
-    try {
-      await FirebaseFirestore.instance
-          .collection('session_feedback')
-          .doc(_sessionId)
-          .set({
-        'session_id': _sessionId,
-        'user_id': userId,
-        'rating': rating,
-        'verdict': _currentVerdict,
-        'pipeline_id': _currentPipelineId,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    try {
-      final token = await ApiService.getIdToken();
-      await http
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/api/feedback'),
-            headers: {
-              'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({
-              'session_id': _sessionId,
-              'user_id': userId,
-              'rating': rating,
-              'verdict': _currentVerdict,
-              'pipeline_id': _currentPipelineId,
-              'message': _lastUserMessage,
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-    } catch (_) {}
+    ApiService.rateMessage(
+      message: userPrompt,
+      sessionId: _sessionId,
+      userId: userId,
+      rating: rating,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(rating == 'good'
-            ? 'Thanks! Glad it was helpful.'
-            : 'Thanks for your feedback.'),
+        content: Text(
+          rating == 'good'
+              ? 'Glad it was helpful!'
+              : 'Thanks — we\'ll review this response.',
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
         backgroundColor: rating == 'good'
-            ? AppColors.success.withValues(alpha: 0.9)
-            : AppColors.surface,
+            ? AppColors.success
+            : AppColors.danger,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  Widget _ratingButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
+  Widget _buildMessageRatingRow(ChatMessage msg) {
+    final rated = _messageRatings[msg.id];
+    if (rated != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8, left: 2),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
+            Icon(
+              rated == 'good' ? Icons.thumb_up : Icons.thumb_down,
+              size: 12,
+              color: rated == 'good' ? AppColors.success : AppColors.danger,
+            ),
+            const SizedBox(width: 4),
             Text(
-              label,
+              rated == 'good' ? 'Helpful' : 'Reported',
               style: TextStyle(
-                  fontSize: 12,
-                  color: color,
-                  fontWeight: FontWeight.w500),
+                fontSize: 11,
+                color: rated == 'good' ? AppColors.success : AppColors.danger,
+              ),
             ),
           ],
         ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => _rateMessage(msg.id, 'good'),
+            child: Icon(Icons.thumb_up_outlined,
+                size: 15, color: AppColors.textMuted),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () => _rateMessage(msg.id, 'bad'),
+            child: Icon(Icons.thumb_down_outlined,
+                size: 15, color: AppColors.textMuted),
+          ),
+        ],
       ),
     );
   }
@@ -387,7 +353,7 @@ class _ChatPanelState extends State<ChatPanel> {
           decoration: BoxDecoration(
             border: Border(
                 bottom:
-                    BorderSide(color: AppColors.border.withOpacity(0.5))),
+                    BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
           ),
           child: Row(
             children: [
@@ -399,7 +365,7 @@ class _ChatPanelState extends State<ChatPanel> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                        color: AppColors.success.withOpacity(0.5),
+                        color: AppColors.success.withValues(alpha: 0.5),
                         blurRadius: 4)
                   ],
                 ),
@@ -424,62 +390,21 @@ class _ChatPanelState extends State<ChatPanel> {
             controller: _scrollController,
             padding: const EdgeInsets.all(16),
             itemCount: _messages.length,
-            itemBuilder: (ctx, i) =>
-                MessageBubble(message: _messages[i]),
+            itemBuilder: (ctx, i) {
+              final msg = _messages[i];
+              if (msg.role == MessageRole.assistant && !msg.isLoading) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MessageBubble(message: msg),
+                    _buildMessageRatingRow(msg),
+                  ],
+                );
+              }
+              return MessageBubble(message: msg);
+            },
           ),
         ),
-
-        // Session feedback bar
-        if (_hasAiResponded)
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: AppColors.border.withValues(alpha: 0.4)),
-            ),
-            child: _feedbackSubmitted
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_outline,
-                          color: AppColors.success, size: 15),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Thanks for your feedback!',
-                        style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Text(
-                        'Rate this session',
-                        style: TextStyle(
-                            color: AppColors.textMuted, fontSize: 12),
-                      ),
-                      const Spacer(),
-                      _ratingButton(
-                        icon: Icons.thumb_up_outlined,
-                        label: 'Good',
-                        color: AppColors.success,
-                        onTap: () => _submitFeedback('good'),
-                      ),
-                      const SizedBox(width: 8),
-                      _ratingButton(
-                        icon: Icons.thumb_down_outlined,
-                        label: 'Bad',
-                        color: AppColors.danger,
-                        onTap: () => _submitFeedback('bad'),
-                      ),
-                    ],
-                  ),
-          ),
 
         // RLHF banner
         if (_rlhfPending)
@@ -487,9 +412,9 @@ class _ChatPanelState extends State<ChatPanel> {
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.15),
+              color: Colors.orange.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withOpacity(0.5)),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
             ),
             child: const Row(
               children: [
@@ -510,7 +435,7 @@ class _ChatPanelState extends State<ChatPanel> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             border: Border(
-                top: BorderSide(color: AppColors.border.withOpacity(0.5))),
+                top: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
           ),
           child: Column(
             children: [
@@ -530,28 +455,28 @@ class _ChatPanelState extends State<ChatPanel> {
                         hintStyle: TextStyle(
                             color: AppColors.textMuted, fontSize: 13),
                         filled: true,
-                        fillColor: AppColors.surface.withOpacity(0.7),
+                        fillColor: AppColors.surface.withValues(alpha: 0.7),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withOpacity(0.5)),
+                              color: AppColors.border.withValues(alpha: 0.5)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withOpacity(0.5)),
+                              color: AppColors.border.withValues(alpha: 0.5)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.accent.withOpacity(0.5)),
+                              color: AppColors.accent.withValues(alpha: 0.5)),
                         ),
                         disabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withOpacity(0.2)),
+                              color: AppColors.border.withValues(alpha: 0.2)),
                         ),
                       ),
                       onSubmitted: (_) => _send(),
@@ -571,13 +496,13 @@ class _ChatPanelState extends State<ChatPanel> {
                         duration: const Duration(milliseconds: 150),
                         decoration: BoxDecoration(
                           color: _isRecording
-                              ? Colors.red.withOpacity(0.8)
-                              : AppColors.surface.withOpacity(0.6),
+                              ? Colors.red.withValues(alpha: 0.8)
+                              : AppColors.surface.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _isRecording
-                                ? Colors.red.withOpacity(0.5)
-                                : AppColors.border.withOpacity(0.5),
+                                ? Colors.red.withValues(alpha: 0.5)
+                                : AppColors.border.withValues(alpha: 0.5),
                           ),
                         ),
                         child: _isTranscribing
@@ -614,14 +539,14 @@ class _ChatPanelState extends State<ChatPanel> {
                               ? null
                               : AppColors.accentGradient,
                           color: (_isSending || _voiceBusy)
-                              ? AppColors.border.withOpacity(0.3)
+                              ? AppColors.border.withValues(alpha: 0.3)
                               : null,
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: (_isSending || _voiceBusy)
                               ? null
                               : [
                                   BoxShadow(
-                                      color: AppColors.accent.withOpacity(0.3),
+                                      color: AppColors.accent.withValues(alpha: 0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2))
                                 ],

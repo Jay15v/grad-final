@@ -98,6 +98,101 @@ def _determine_flag_type(
 
 
 # ---------------------------------------------------------------------------
+# Explainability helpers
+# ---------------------------------------------------------------------------
+
+def _generate_explanation(
+    flag_type: str,
+    avg_agreement: float | None,
+    rag_hit_rate: float | None,
+    hallucination_count: int | None = None,
+) -> str:
+    if flag_type == "HALLUCINATION_CONFIRMED":
+        parts = []
+        if avg_agreement is not None:
+            parts.append(f"Models disagreed on this response (avg agreement: {avg_agreement:.0%}).")
+        else:
+            parts.append("Models disagreed on this response.")
+        if rag_hit_rate is not None:
+            strength = "strong" if rag_hit_rate >= 0.5 else "weak"
+            parts.append(f"RAG evidence was {strength} ({rag_hit_rate:.0%} hit rate).")
+        parts.append("User confirmed the output was bad.")
+        return " ".join(parts)
+
+    if flag_type == "FALSE_CONSENSUS":
+        parts = []
+        if avg_agreement is not None:
+            parts.append(f"All models agreed ({avg_agreement:.0%} similarity) but the output was still incorrect.")
+        else:
+            parts.append("All models agreed but the output was still incorrect.")
+        parts.append("The consensus threshold may be too low — models are agreeing on wrong answers.")
+        return " ".join(parts)
+
+    if flag_type == "RAG_WEAK":
+        parts = []
+        if rag_hit_rate is not None:
+            parts.append(f"RAG retrieved relevant evidence ({rag_hit_rate:.0%} hit rate) but the response was still wrong.")
+        else:
+            parts.append("RAG found evidence but the response was still wrong.")
+        parts.append("The knowledge base likely lacks sufficient entries for this topic.")
+        return " ".join(parts)
+
+    if flag_type == "LLM_DEGRADED":
+        count = hallucination_count or _SURGE_LIMIT + 1
+        return (
+            f"{count} hallucination flags detected in the last 24 hours "
+            f"(limit: {_SURGE_LIMIT}). The primary LLM is producing unreliable "
+            f"responses at an abnormal rate."
+        )
+
+    return "This flag was raised due to an unknown condition. Manual review required."
+
+
+def _generate_suggestion(
+    flag_type: str,
+    avg_agreement: float | None,
+    consensus_threshold: float,
+) -> tuple[str, str, float | None]:
+    """Returns (suggestion_text, action_type, suggested_threshold)."""
+
+    if flag_type == "HALLUCINATION_CONFIRMED":
+        return (
+            "Add this topic to the RAG knowledge base so future similar prompts "
+            "have stronger evidence backing.",
+            "rag_tuning",
+            None,
+        )
+
+    if flag_type == "FALSE_CONSENSUS":
+        suggested = round(min((avg_agreement or consensus_threshold) + 0.07, 0.95), 2)
+        return (
+            f"Raise the consensus threshold to {suggested} to make agreement "
+            f"detection stricter and reduce false consensus.",
+            "raise_threshold",
+            suggested,
+        )
+
+    if flag_type == "RAG_WEAK":
+        return (
+            "Expand the RAG knowledge base with more entries covering this topic "
+            "to improve retrieval quality.",
+            "rag_tuning",
+            None,
+        )
+
+    if flag_type == "LLM_DEGRADED":
+        suggested = round(max(consensus_threshold - 0.05, 0.50), 2)
+        return (
+            f"Lower the consensus threshold to {suggested} to catch model "
+            f"disagreements earlier and trigger more parent alerts.",
+            "lower_threshold",
+            suggested,
+        )
+
+    return ("Review this flag manually.", "manual", None)
+
+
+# ---------------------------------------------------------------------------
 # Surge detector
 # ---------------------------------------------------------------------------
 
@@ -138,15 +233,20 @@ def _check_hallucination_surge(db) -> None:
         if has_open:
             return
 
+        config = _get_system_config()
+        exp = _generate_explanation("LLM_DEGRADED", None, None, hallucination_count=count)
+        sugg, action_type, suggested_threshold = _generate_suggestion(
+            "LLM_DEGRADED", None, config["consensus_threshold"]
+        )
         db.collection("admin_flags").add({
             "flag_type":               "LLM_DEGRADED",
-            "reason":                  (
-                f"HALLUCINATION_CONFIRMED flags exceeded {_SURGE_LIMIT} "
-                f"in 24h (count={count})"
-            ),
             "hallucination_count_24h": count,
             "resolved":                False,
             "created_at":              time.time(),
+            "explanation":             exp,
+            "suggestion":              sugg,
+            "action_type":             action_type,
+            "suggested_threshold":     suggested_threshold,
         })
         logger.warning(
             "flag_engine: LLM_DEGRADED auto-flag written (count=%d)", count
@@ -197,20 +297,30 @@ def _run(session_id: str, user_id: str, pipeline_id: str | None, pipeline_store:
             config["rag_threshold"],
         )
 
+        # ── Generate explanation + suggestion ─────────────────────────────
+        explanation = _generate_explanation(flag_type, avg_agreement, rag_hit_rate)
+        suggestion, action_type, suggested_threshold = _generate_suggestion(
+            flag_type, avg_agreement, config["consensus_threshold"]
+        )
+
         # ── Write flag document ───────────────────────────────────────────
         db = fb_firestore.client()
         db.collection("admin_flags").add({
-            "session_id":     session_id,
-            "user_id":        user_id,
-            "pipeline_id":    pipeline_id,
-            "flag_type":      flag_type,
-            "verdict":        verdict,
-            "avg_agreement":  avg_agreement,
-            "rag_hit_rate":   rag_hit_rate,
-            "prompt_snippet": (message or "")[:200] if message else None,
-            "rating":         "bad",
-            "resolved":       False,
-            "created_at":     time.time(),
+            "session_id":          session_id,
+            "user_id":             user_id,
+            "pipeline_id":         pipeline_id,
+            "flag_type":           flag_type,
+            "verdict":             verdict,
+            "avg_agreement":       avg_agreement,
+            "rag_hit_rate":        rag_hit_rate,
+            "prompt_snippet":      (message or "")[:200] if message else None,
+            "rating":              "bad",
+            "resolved":            False,
+            "created_at":          time.time(),
+            "explanation":         explanation,
+            "suggestion":          suggestion,
+            "action_type":         action_type,
+            "suggested_threshold": suggested_threshold,
         })
         logger.info(
             "flag_engine: wrote %s flag for session=%s pipeline=%s",

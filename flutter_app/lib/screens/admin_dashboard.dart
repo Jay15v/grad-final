@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/app_colors.dart';
+import '../widgets/auth_widgets.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -44,6 +45,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         child: Column(
           children: [
             _buildHeader(),
+            _buildStatsRow(),
             _buildTabBar(),
             Expanded(
               child: TabBarView(
@@ -77,54 +79,79 @@ class _AdminDashboardState extends State<AdminDashboard>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 48, 20, 16),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface.withOpacity(0.95),
+        gradient: AppColors.headerGradient,
         border: Border(
-          bottom: BorderSide(color: AppColors.accent.withOpacity(0.1)),
+          bottom: BorderSide(
+              color: AppColors.adminAccent.withValues(alpha: 0.25), width: 1),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
+          // Shield logo with admin red glow
           Container(
-            width: 36,
-            height: 36,
             decoration: BoxDecoration(
-              gradient: AppColors.accentGradient,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(
-              child: Text(
-                'A',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.adminAccent.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
-              ),
+              ],
             ),
+            child: const ShieldLogo(size: 40, iconSize: 20, radius: 10),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Admin Dashboard',
+                'AegisMind Admin',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: 17,
+                  letterSpacing: 0.3,
                 ),
               ),
               Text(
-                'AegisMind',
+                'Where Defense Meets Reasoning',
                 style: TextStyle(
-                  color: AppColors.accent.withOpacity(0.8),
+                  color: AppColors.textMuted,
                   fontSize: 10,
                 ),
               ),
             ],
           ),
           const Spacer(),
+          // Admin badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.adminAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: AppColors.adminAccent.withValues(alpha: 0.35)),
+            ),
+            child: const Text(
+              'ADMIN',
+              style: TextStyle(
+                color: AppColors.adminAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: Icon(Icons.logout, color: AppColors.textMuted, size: 20),
             tooltip: 'Sign out',
@@ -135,17 +162,93 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
+  Widget _buildStatsRow() {
+    return Container(
+      color: AppColors.bgSurface.withValues(alpha: 0.6),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      // Nest StreamBuilders so all 4 cards live in one Row with bounded widths
+      child: StreamBuilder<List<UserModel>>(
+        stream: _firestoreService.getAllUsers(),
+        builder: (context, userSnap) {
+          final users    = userSnap.data ?? [];
+          final parents  = users.where((u) => u.role == 'parent').length;
+          final children = users.where((u) => u.role == 'child').length;
+
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('admin_flags')
+                .where('resolved', isEqualTo: false)
+                .snapshots(),
+            builder: (context, flagSnap) {
+              final alerts = flagSnap.data?.docs.length ?? 0;
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Total Users',
+                      value: '${users.length}',
+                      icon: Icons.people_outline,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Parents',
+                      value: '$parents',
+                      icon: Icons.person_outline,
+                      color: AppColors.parentAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Children',
+                      value: '$children',
+                      icon: Icons.child_care,
+                      color: AppColors.childAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Alerts',
+                      value: '$alerts',
+                      icon: Icons.flag_outlined,
+                      color: AppColors.adminAccent,
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildTabBar() {
     return Container(
-      color: AppColors.bgSurface,
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(
+          bottom: BorderSide(
+              color: AppColors.border.withValues(alpha: 0.5), width: 1),
+        ),
+      ),
       child: TabBar(
         controller: _tabs,
         labelColor: AppColors.accent,
         unselectedLabelColor: AppColors.textMuted,
         indicatorColor: AppColors.accent,
         indicatorWeight: 2,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
         labelStyle:
-            const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
         tabs: const [
           Tab(text: 'All Users'),
           Tab(text: 'Create Parent'),
@@ -753,6 +856,26 @@ class _AlertsTab extends StatelessWidget {
     }
   }
 
+  Future<void> _applyThreshold(BuildContext ctx, String docId, double threshold) async {
+    await FirebaseFirestore.instance
+        .collection('system_config')
+        .doc('thresholds')
+        .set({'consensus_threshold': threshold}, SetOptions(merge: true));
+    await FirebaseFirestore.instance
+        .collection('admin_flags')
+        .doc(docId)
+        .update({'resolved': true});
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+        content: Text('Threshold updated to ${threshold.toStringAsFixed(2)}.'),
+        backgroundColor: AppColors.success.withValues(alpha: 0.9),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 2),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
@@ -802,6 +925,7 @@ class _AlertsTab extends StatelessWidget {
             final doc  = docs[i];
             final data = doc.data() as Map<String, dynamic>;
             final color = _flagColor(data['flag_type'] as String?);
+            final suggestedThreshold = (data['suggested_threshold'] as num?)?.toDouble();
             return _AlertCard(
               data: data,
               flagColor: color,
@@ -809,6 +933,9 @@ class _AlertsTab extends StatelessWidget {
               timeAgo: _timeAgo(data['created_at'] as num?),
               onResolve:   () => _resolve(context, doc.id),
               onRagTuning: () => _flagForRag(context, doc.id),
+              onApplyThreshold: suggestedThreshold != null
+                  ? () => _applyThreshold(context, doc.id, suggestedThreshold)
+                  : null,
             );
           },
         );
@@ -826,6 +953,7 @@ class _AlertCard extends StatelessWidget {
   final String timeAgo;
   final VoidCallback onResolve;
   final VoidCallback onRagTuning;
+  final VoidCallback? onApplyThreshold;
 
   const _AlertCard({
     required this.data,
@@ -834,15 +962,19 @@ class _AlertCard extends StatelessWidget {
     required this.timeAgo,
     required this.onResolve,
     required this.onRagTuning,
+    this.onApplyThreshold,
   });
 
   @override
   Widget build(BuildContext context) {
-    final verdict       = data['verdict'] as String?;
-    final ragHitRate    = data['rag_hit_rate'] != null
-        ? (data['rag_hit_rate'] as num).toDouble()
-        : null;
-    final promptSnippet = data['prompt_snippet'] as String?;
+    final verdict            = data['verdict'] as String?;
+    final ragHitRate         = (data['rag_hit_rate'] as num?)?.toDouble();
+    final promptSnippet      = data['prompt_snippet'] as String?;
+    final explanation        = data['explanation'] as String?;
+    final suggestion         = data['suggestion'] as String?;
+    final actionType         = data['action_type'] as String?;
+    final suggestedThreshold = (data['suggested_threshold'] as num?)?.toDouble();
+    final hallucCount        = (data['hallucination_count_24h'] as num?)?.toInt();
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -854,12 +986,11 @@ class _AlertCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: badge + time
+          // ── Header: badge + time ──────────────────────────────────────
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: flagColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
@@ -875,60 +1006,155 @@ class _AlertCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (hallucCount != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '$hallucCount hallucinations / 24h',
+                    style: TextStyle(color: AppColors.danger, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
               const Spacer(),
-              Text(timeAgo,
-                  style: TextStyle(
-                      color: AppColors.textMuted, fontSize: 11)),
+              Text(timeAgo, style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
             ],
           ),
 
-          // Prompt snippet
+          // ── Prompt snippet ────────────────────────────────────────────
           if (promptSnippet != null && promptSnippet.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
               '"$promptSnippet"',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
 
-          const SizedBox(height: 10),
-
-          // Meta: verdict + RAG hit rate
-          Row(
-            children: [
-              if (verdict != null) ...[
-                _metaChip(
-                  icon: Icons.model_training_outlined,
-                  label: verdict,
-                  color: verdict == 'DISAGREEMENT'
-                      ? AppColors.danger
-                      : verdict == 'PARTIAL'
-                          ? AppColors.warning
-                          : AppColors.success,
-                ),
-                const SizedBox(width: 8),
+          // ── Meta chips ────────────────────────────────────────────────
+          if (verdict != null || ragHitRate != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (verdict != null) ...[
+                  _metaChip(
+                    icon: Icons.model_training_outlined,
+                    label: verdict,
+                    color: verdict == 'DISAGREEMENT' ? AppColors.danger
+                        : verdict == 'PARTIAL' ? AppColors.warning
+                        : AppColors.success,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (ragHitRate != null)
+                  _metaChip(
+                    icon: Icons.search_outlined,
+                    label: 'RAG ${(ragHitRate * 100).toStringAsFixed(0)}%',
+                    color: ragHitRate >= 0.5 ? AppColors.success : AppColors.warning,
+                  ),
               ],
-              if (ragHitRate != null)
-                _metaChip(
-                  icon: Icons.search_outlined,
-                  label:
-                      'RAG ${(ragHitRate * 100).toStringAsFixed(0)}%',
-                  color: ragHitRate >= 0.5
-                      ? AppColors.success
-                      : AppColors.warning,
-                ),
-            ],
-          ),
+            ),
+          ],
+
+          // ── Explanation ───────────────────────────────────────────────
+          if (explanation != null && explanation.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: flagColor.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: flagColor.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: flagColor),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      explanation,
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Suggestion ────────────────────────────────────────────────
+          if (suggestion != null && suggestion.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.accent.withValues(alpha: 0.18)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.lightbulb_outline, size: 14, color: AppColors.accent),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Suggested action',
+                          style: TextStyle(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          suggestion,
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                        ),
+                        if (suggestedThreshold != null) ...[
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: onApplyThreshold,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    actionType == 'raise_threshold' ? Icons.arrow_upward : Icons.arrow_downward,
+                                    size: 12, color: AppColors.accent,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'Apply: set threshold to ${suggestedThreshold.toStringAsFixed(2)}',
+                                    style: TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 12),
 
-          // Action buttons
+          // ── Action buttons ────────────────────────────────────────────
           Row(
             children: [
               _actionButton(
@@ -937,13 +1163,15 @@ class _AlertCard extends StatelessWidget {
                 color: AppColors.success,
                 onTap: onResolve,
               ),
-              const SizedBox(width: 8),
-              _actionButton(
-                icon: Icons.tune_outlined,
-                label: 'Flag for RAG Tuning',
-                color: AppColors.accent,
-                onTap: onRagTuning,
-              ),
+              if (actionType == 'rag_tuning' || actionType == null) ...[
+                const SizedBox(width: 8),
+                _actionButton(
+                  icon: Icons.tune_outlined,
+                  label: 'Flag for RAG Tuning',
+                  color: AppColors.accent,
+                  onTap: onRagTuning,
+                ),
+              ],
             ],
           ),
         ],
@@ -1128,12 +1356,25 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
             style: TextStyle(color: AppColors.danger)),
       );
     }
-    return SingleChildScrollView(
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.accent,
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel('Summary'),
+          Row(
+            children: [
+              _sectionLabel('Summary'),
+              const Spacer(),
+              GestureDetector(
+                onTap: _loadData,
+                child: Icon(Icons.refresh, color: AppColors.accent, size: 20),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           _buildSummaryCards(),
           const SizedBox(height: 20),
@@ -1147,7 +1388,8 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
           const SizedBox(height: 20),
         ],
       ),
-    );
+    ), // SingleChildScrollView
+    ); // RefreshIndicator
   }
 
   Widget _sectionLabel(String text) => Text(
@@ -1417,6 +1659,73 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                             fontWeight: FontWeight.w600,
                             fontSize: 14)),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // No Expanded inside — avoids unbounded-width layout errors.
+    // The parent Expanded in _buildStatsRow gives us our width.
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, color: color, size: 14),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ],
       ),

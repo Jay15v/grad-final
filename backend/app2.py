@@ -292,25 +292,14 @@ def chat():
             "rlhf_pending": rlhf_pending,
         })
 
-    # 2. Ollama chat reply
+    # 2. Ollama chat reply — pipeline is NOT started here; it fires only on bad rating
     reply = call_ollama_chat(message, history)
-
-    # 3. Start background pipeline (includes consensus validation)
-    pipeline_id = str(uuid.uuid4())
-    pipeline_store[pipeline_id] = {"status": "running", "stages": {}, "verdict": None, "display_label": None, "avg_agreement": None, "model_statuses": None}
-
-    thread = threading.Thread(
-        target=_run_pipeline,
-        args=(pipeline_id, message, child_id or "anonymous"),
-        daemon=True,
-    )
-    thread.start()
 
     return jsonify({
         "decision":       decision,
         "reply":          reply,
         "defense_meta":   defense,
-        "pipeline_id":    pipeline_id,
+        "pipeline_id":    None,
         "case_id":        case_id,
         "rlhf_pending":   rlhf_pending,
         "verdict":        None,
@@ -337,6 +326,55 @@ def get_pipeline(pipeline_id):
 
 
 # ------------------------------------------------------------------
+# Helper: run full pipeline then flag engine (triggered by bad rating)
+# ------------------------------------------------------------------
+def _run_pipeline_and_flag(message: str, session_id: str, user_id: str):
+    pipeline_id = str(uuid.uuid4())
+    pipeline_store[pipeline_id] = {
+        "status": "running", "stages": {}, "verdict": None,
+        "display_label": None, "avg_agreement": None, "model_statuses": None,
+    }
+
+    def _work():
+        import time as _t
+        _run_pipeline(pipeline_id, message)
+        # _run_pipeline returns after spawning consensus in its own thread;
+        # wait until consensus sets status='done' (max ~2 min)
+        for _ in range(240):
+            if pipeline_store.get(pipeline_id, {}).get("status") == "done":
+                break
+            _t.sleep(0.5)
+        from services.flag_engine import _run as _flag_run
+        _flag_run(session_id, user_id, pipeline_id, pipeline_store, message)
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
+# ------------------------------------------------------------------
+# New: Per-message rating — bad rating fires reasoning pipeline
+# ------------------------------------------------------------------
+@app.route("/api/message_rating", methods=["POST", "OPTIONS"])
+def message_rating():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    data       = request.get_json(force=True) or {}
+    message    = (data.get("message")    or "").strip()
+    session_id = (data.get("session_id") or "").strip()
+    user_id    = (data.get("user_id")    or "").strip()
+    rating     = (data.get("rating")     or "").strip()
+
+    if rating not in ("good", "bad"):
+        return jsonify({"error": "rating must be 'good' or 'bad'"}), 400
+
+    if rating == "bad" and message:
+        _run_pipeline_and_flag(message, session_id, user_id)
+        return jsonify({"started": True, "rating": "bad"}), 200
+
+    return jsonify({"started": False, "rating": rating}), 200
+
+
+# ------------------------------------------------------------------
 # New: Session-level user feedback (thumbs up / down)
 # ------------------------------------------------------------------
 @app.route("/api/feedback", methods=["POST", "OPTIONS"])
@@ -359,7 +397,7 @@ def session_feedback():
 
     ok = save_session_feedback(session_id, user_id, rating, verdict, pipeline_id)
 
-    if rating == "bad":
+    if rating == "bad" and pipeline_id:
         run_flag_engine(session_id, user_id, pipeline_id, pipeline_store, message)
 
     return jsonify({"success": ok, "session_id": session_id}), 200

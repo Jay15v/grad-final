@@ -1,6 +1,7 @@
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "phi3"
 
 def call_phi3(prompt: str) -> str:
@@ -38,6 +39,34 @@ def call_phi3(prompt: str) -> str:
         print("OLLAMA REQUEST ERROR:", str(e))
         return ""
     except ValueError as e:
-        # JSON decode error
         print("OLLAMA JSON ERROR:", str(e))
+        return ""
+
+
+def call_ollama_chat(message: str, history: list) -> str:
+    messages = list(history) if history else []
+    messages.append({"role": "user", "content": message})
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "stream": False,
+        "options": {
+            "temperature": 0.0,
+            "top_p": 0.9,
+            "num_predict": 180
+        }
+    }
+
+    try:
+        response = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+        out = data.get("message", {}).get("content", "")
+        return out if isinstance(out, str) else str(out)
+    except requests.exceptions.RequestException as e:
+        print("OLLAMA CHAT REQUEST ERROR:", str(e))
+        return ""
+    except ValueError as e:
+        print("OLLAMA CHAT JSON ERROR:", str(e))
         return ""

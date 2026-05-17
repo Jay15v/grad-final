@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/app_colors.dart';
+import '../widgets/auth_widgets.dart';
 import '../main.dart' show HomeShell, AuthGate;
 import '../config/api_config.dart';
 import 'child_location_screen.dart';
@@ -23,6 +24,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
 
   List<Map<String, dynamic>> _pendingCases = [];
   bool _loadingPending = false;
+  final Set<int> _favoritedCaseIds = {};
   late AnimationController _pulseController;
 
   @override
@@ -199,121 +201,194 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
             final dateStr =
                 '${createdAt.day}/${createdAt.month}/${createdAt.year} '
                 '${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}';
+            final caseId = c['case_id'] as int;
+            final isFavorited = _favoritedCaseIds.contains(caseId);
 
-            return AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                final borderColor = Color.lerp(
-                  Colors.orange,
-                  Colors.orange.withOpacity(0.3),
-                  _pulseController.value,
-                )!;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor, width: 2),
-                    color: Colors.orange.withOpacity(0.05),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      const Text(
-                        'Review Required — Uncertain Content Detected',
-                        style: TextStyle(
-                          color: Colors.orange,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Prompt text
-                      Text(
-                        c['prompt'] as String,
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Risk score
-                      Row(
-                        children: [
-                          Text(
-                            'Risk Score: $riskPercent',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Risk bar
-                      LinearProgressIndicator(
-                        value: riskScore,
-                        backgroundColor: Colors.grey.withOpacity(0.3),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          riskScore > 0.7
-                              ? Colors.red
-                              : riskScore > 0.4
-                                  ? Colors.orange
-                                  : Colors.green,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Date
-                      Text(
-                        'Submitted: $dateStr',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Feedback buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => submitFeedback(
-                                c['case_id'] as int,
-                                1,
-                              ),
-                              icon: const Icon(Icons.dangerous_outlined,
-                                  size: 16),
-                              label: const Text('Confirm Dangerous'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => submitFeedback(
-                                c['case_id'] as int,
-                                0,
-                              ),
-                              icon: const Icon(Icons.check_circle_outline,
-                                  size: 16),
-                              label: const Text('Mark as Safe'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+            return Dismissible(
+              key: ValueKey(caseId),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 24),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.delete_outline, color: Colors.red, size: 26),
+                    SizedBox(height: 4),
+                    Text(
+                      'Dismiss',
+                      style: TextStyle(color: Colors.red, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              onDismissed: (_) {
+                final removedCase = c;
+                final idx = _pendingCases.indexOf(c);
+                setState(() {
+                  _pendingCases.removeWhere((x) => x['case_id'] == caseId);
+                  _favoritedCaseIds.remove(caseId);
+                });
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Case dismissed'),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () {
+                        setState(() {
+                          _pendingCases.insert(
+                            idx.clamp(0, _pendingCases.length),
+                            removedCase,
+                          );
+                        });
+                      },
+                    ),
                   ),
                 );
               },
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  final borderColor = Color.lerp(
+                    Colors.orange,
+                    Colors.orange.withOpacity(0.3),
+                    _pulseController.value,
+                  )!;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: borderColor, width: 2),
+                      color: Colors.orange.withOpacity(0.05),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title row with favorite button
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Review Required — Uncertain Content Detected',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                if (isFavorited) {
+                                  _favoritedCaseIds.remove(caseId);
+                                } else {
+                                  _favoritedCaseIds.add(caseId);
+                                }
+                              }),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Icon(
+                                  isFavorited
+                                      ? Icons.star
+                                      : Icons.star_outline,
+                                  color: isFavorited
+                                      ? Colors.amber
+                                      : AppColors.textMuted,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Prompt text
+                        Text(
+                          c['prompt'] as String,
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Risk score
+                        Text(
+                          'Risk Score: $riskPercent',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Risk bar
+                        LinearProgressIndicator(
+                          value: riskScore,
+                          backgroundColor: Colors.grey.withOpacity(0.3),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            riskScore > 0.7
+                                ? Colors.red
+                                : riskScore > 0.4
+                                    ? Colors.orange
+                                    : Colors.green,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Date
+                        Text(
+                          'Submitted: $dateStr',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Feedback buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    submitFeedback(caseId, 1),
+                                icon: const Icon(Icons.dangerous_outlined,
+                                    size: 16),
+                                label: const Text('Confirm Dangerous'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    submitFeedback(caseId, 0),
+                                icon: const Icon(Icons.check_circle_outline,
+                                    size: 16),
+                                label: const Text('Mark as Safe'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             );
           }).toList()),
       ],
@@ -364,32 +439,35 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 48, 20, 16),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface.withOpacity(0.95),
+        gradient: AppColors.headerGradient,
         border: Border(
-          bottom: BorderSide(color: AppColors.accent.withOpacity(0.1)),
+          bottom: BorderSide(
+              color: AppColors.parentAccent.withValues(alpha: 0.25), width: 1),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
             decoration: BoxDecoration(
-              gradient: AppColors.accentGradient,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(
-              child: Text(
-                'A',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.parentAccent.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
-              ),
+              ],
             ),
+            child: const ShieldLogo(size: 40, iconSize: 20, radius: 10),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -399,19 +477,38 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: 17,
+                  letterSpacing: 0.3,
                 ),
               ),
               Text(
                 'Parent Portal',
-                style: TextStyle(
-                  color: AppColors.accent.withOpacity(0.8),
-                  fontSize: 10,
-                ),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 10),
               ),
             ],
           ),
           const Spacer(),
+          // Parent badge
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.parentAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: AppColors.parentAccent.withValues(alpha: 0.35)),
+            ),
+            child: const Text(
+              'PARENT',
+              style: TextStyle(
+                color: AppColors.parentAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             icon: Icon(Icons.refresh, color: AppColors.textMuted, size: 20),
             tooltip: 'Refresh pending reviews',
@@ -461,15 +558,18 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
   }
 
   Widget _buildWelcomeCard(UserModel? parent) {
+    final since = parent?.createdAt != null
+        ? '${parent!.createdAt.day}/${parent.createdAt.month}/${parent.createdAt.year}'
+        : null;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: AppColors.accentGradient,
+        gradient: AppColors.parentGradient,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.accent.withOpacity(0.2),
+            color: AppColors.parentAccent.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -477,17 +577,27 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
       ),
       child: Row(
         children: [
+          // Avatar circle with initials
           Container(
-            width: 48,
-            height: 48,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.3), width: 2),
             ),
-            child: const Icon(
-              Icons.person_outlined,
-              color: Colors.white,
-              size: 26,
+            child: Center(
+              child: Text(
+                parent != null && parent.name.isNotEmpty
+                    ? parent.name[0].toUpperCase()
+                    : 'P',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -504,9 +614,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Manage your children\'s accounts below.',
-                  style: TextStyle(
+                Text(
+                  since != null
+                      ? 'Protecting your children since $since'
+                      : 'Protecting your children with AegisMind',
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
                   ),
@@ -514,6 +626,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
               ],
             ),
           ),
+          const Icon(Icons.shield_outlined, color: Colors.white38, size: 32),
         ],
       ),
     );
@@ -584,13 +697,20 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Child Accounts',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+        Row(
+          children: [
+            const Icon(Icons.child_care,
+                color: AppColors.childAccent, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              'Child Accounts',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         StreamBuilder<List<UserModel>>(
@@ -600,157 +720,212 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
               return const Center(child: CircularProgressIndicator());
             }
             final children = snapshot.data ?? [];
+
+            // ── Empty state ─────────────────────────────────────────────
             if (children.isEmpty) {
               return Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 32, horizontal: 20),
                 decoration: BoxDecoration(
                   color: AppColors.bgSurface,
-                  border:
-                      Border.all(color: AppColors.border.withOpacity(0.4)),
-                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.4)),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.child_care,
-                      color: AppColors.textMuted,
-                      size: 32,
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.childAccent.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.child_care,
+                          color: AppColors.childAccent, size: 28),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No child accounts yet',
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No children linked yet',
                       style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 13,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
-                      'Ask your admin to create a child account linked to you.',
+                      'Ask your admin to create a child account\nlinked to your email.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 11,
-                      ),
+                          color: AppColors.textMuted, fontSize: 12),
                     ),
                   ],
                 ),
               );
             }
+
+            // ── Child cards ──────────────────────────────────────────────
             return ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: children.length,
-              separatorBuilder: (_, i) => const SizedBox(height: 8),
+              separatorBuilder: (context, i) => const SizedBox(height: 10),
               itemBuilder: (context, i) {
                 final child = children[i];
                 return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
                   decoration: BoxDecoration(
                     color: AppColors.bgSurface,
-                    border: Border.all(
-                        color: AppColors.border.withOpacity(0.4)),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppColors.border.withValues(alpha: 0.3)),
+                    boxShadow: AppColors.cardShadow,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              Icons.child_care,
-                              color: AppColors.success,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
+                          // Teal left accent strip
+                          Container(width: 3, color: AppColors.childAccent),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  child.name,
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                              child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            // Avatar circle with initials
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                gradient: AppColors.childGradient,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  child.name.isNotEmpty
+                                      ? child.name[0].toUpperCase()
+                                      : 'C',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  child.email,
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        child.name,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      // Online status dot
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.success,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.success
+                                                  .withValues(alpha: 0.5),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    child.email,
+                                    style: TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // CHILD pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.childAccent
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: AppColors.childAccent
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: const Text(
+                                'CHILD',
+                                style: TextStyle(
+                                  color: AppColors.childAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: AppColors.success.withOpacity(0.3)),
-                            ),
-                            child: Text(
-                              'CHILD',
-                              style: TextStyle(
-                                color: AppColors.success,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChildLocationScreen(
-                                childId: child.uid,
-                                childName: child.name,
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChildLocationScreen(
+                                  childId: child.uid,
+                                  childName: child.name,
+                                ),
                               ),
                             ),
-                          ),
-                          icon: const Icon(
-                              Icons.location_on_outlined,
-                              size: 15),
-                          label: const Text('View Location'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.accent,
-                            side: BorderSide(
-                                color: AppColors.accent.withOpacity(0.4)),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 8),
-                            textStyle: const TextStyle(fontSize: 13),
+                            icon: const Icon(Icons.location_on_outlined,
+                                size: 15),
+                            label: const Text('View Activity'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.childAccent,
+                              side: BorderSide(
+                                  color: AppColors.childAccent
+                                      .withValues(alpha: 0.4)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                              textStyle: const TextStyle(fontSize: 13),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
+                      ],
+                    ),         // Column
+                  ),           // Padding
+                ),             // Expanded
+              ],               // Row children
+            ),                 // Row
+          ),                   // IntrinsicHeight
+        ),                     // ClipRRect
+      );                       // Container
+    },                         // itemBuilder
+  );                           // ListView.separated
+},                             // StreamBuilder builder
         ),
       ],
     );
