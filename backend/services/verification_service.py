@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -12,19 +13,68 @@ MODEL_PATH = os.path.join(
     "deberta_nli_verifier"
 )
 
+# Public HuggingFace NLI model (3-class: entailment / neutral / contradiction)
+_HF_FALLBACK = "cross-encoder/nli-deberta-v3-small"
+
+_MODEL_FILES = [
+    "pytorch_model.bin",
+    "model.safetensors",
+    "tf_model.h5",
+    "model.ckpt.index",
+    "flax_model.msgpack",
+]
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+tokenizer_nli = None
+model_nli = None
+_nli_unavailable = False
+
+
+def _has_model_files(directory: str) -> bool:
+    if not os.path.isdir(directory):
+        return False
+    return any(f in os.listdir(directory) for f in _MODEL_FILES)
+
+
+os.makedirs(MODEL_PATH, exist_ok=True)
 
 print(f"[Verification] Loading model from: {MODEL_PATH}")
 
-tokenizer_nli = AutoTokenizer.from_pretrained(MODEL_PATH)
-model_nli = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
-model_nli = model_nli.to(device)
-model_nli.eval()
+if _has_model_files(MODEL_PATH):
+    try:
+        tokenizer_nli = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
+        model_nli = AutoModelForSequenceClassification.from_pretrained(
+            MODEL_PATH, local_files_only=True
+        ).to(device)
+        model_nli.eval()
+        print("[Verification] Model loaded from local cache")
+    except Exception as e:
+        print(f"[Verification] Local files corrupted ({e}) -- clearing and re-downloading...")
+        shutil.rmtree(MODEL_PATH)
+        os.makedirs(MODEL_PATH, exist_ok=True)
 
-print("[Verification] Model loaded successfully")
+if model_nli is None and not _nli_unavailable:
+    try:
+        print(f"[Verification] Downloading {_HF_FALLBACK} from HuggingFace...")
+        tokenizer_nli = AutoTokenizer.from_pretrained(_HF_FALLBACK)
+        model_nli = AutoModelForSequenceClassification.from_pretrained(_HF_FALLBACK)
+        print(f"[Verification] Saving to {MODEL_PATH}...")
+        tokenizer_nli.save_pretrained(MODEL_PATH)
+        model_nli.save_pretrained(MODEL_PATH)
+        model_nli = model_nli.to(device)
+        model_nli.eval()
+        print("[Verification] Model ready")
+    except Exception as e:
+        print(f"[Verification] Could not load NLI model: {e}")
+        print("[Verification] verify_rag_output will return neutral results until model is available.")
+        _nli_unavailable = True
 
 
 def nli_probs(premise: str, hypothesis: str, max_len: int = 256):
+    if _nli_unavailable or model_nli is None or tokenizer_nli is None:
+        return {"entailment": 0.33, "neutral": 0.34, "contradiction": 0.33}
+
     inputs = tokenizer_nli(
         premise,
         hypothesis,

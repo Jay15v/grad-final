@@ -55,7 +55,7 @@ Rules:
 
         except Exception as e:
             # Keep pipeline alive even if Phi-3 fails
-            print(f"⚠️ Phi-3 error at step {step_id}: {e}")
+            print(f"[warn] Phi-3 error at step {step_id}: {e}")
             explanation = ""
 
         reasoning_results.append({

@@ -31,6 +31,23 @@ except ImportError:
     _firebase_available = False
     logging.warning("firebase_admin not installed — token verification disabled")
 
+def _publish_backend_url():
+    """Detect current LAN IP and write it to Firestore so the app always finds the backend."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        from firebase_admin import firestore as _fs
+        _fs.client().collection("system_config").document("backend").set(
+            {"url": f"http://{ip}:5000"}, merge=True
+        )
+        print(f"Backend URL published to Firestore: http://{ip}:5000")
+    except Exception as e:
+        logging.warning(f"Could not publish backend URL: {e}")
+
+
 # Step 5, 6, 7: resolve path and initialize
 if _firebase_available:
     sa_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
@@ -41,7 +58,8 @@ if _firebase_available:
             if not firebase_admin._apps:
                 cred = credentials.Certificate(sa_path)
                 firebase_admin.initialize_app(cred)
-                print("✅ Firebase Admin initialized successfully")
+                print("Firebase Admin initialized successfully")
+            _publish_backend_url()
         except Exception as e:
             logging.warning(f"Firebase Admin init failed: {e}")
     else:
@@ -53,8 +71,11 @@ from services.notification_service import notify_parent_if_needed
 from services.adaptive_store import (
     init_db, log_case, update_rlhf_label,
     get_pending_cases, get_buffer_stats,
-    get_firebase_uid, start_background_jobs
+    get_firebase_uid, start_background_jobs,
+    get_confirmed_dangerous_cases
 )
+from services.internal_rag import InternalRAG
+rag = InternalRAG(top_k=5)
 from services.feedback_store import init_feedback_db, save_session_feedback
 from services.flag_engine import run_flag_engine
 from services.retrain_bert import retrain_state, run_retraining, check_trigger_conditions
@@ -114,6 +135,11 @@ def _defense_check(message: str) -> dict:
     elif semantic_domain == "social_engineering":
         final_risk = max(bert_risk * 1.0, 0.30)
 
+    # Internal RAG boost
+    rag_result = rag.get_context_summary(message)
+    rag_boost = rag_result['rag_boost']
+    final_risk = min(1.0, final_risk + rag_boost)
+
     if final_risk >= BLOCK_THRESHOLD:
         decision = "BLOCK"
     elif final_risk >= HESITATE_THRESHOLD:
@@ -127,6 +153,9 @@ def _defense_check(message: str) -> dict:
         "semantic_domain": semantic_domain,
         "semantic_similarity": round(semantic_similarity, 3),
         "final_risk": round(final_risk, 3),
+        "rag_boost": rag_boost,
+        "rag_cases_found": rag_result['cases_found'],
+        "rag_top_similarity": rag_result['top_similarity'],
     }
 
 
@@ -290,6 +319,8 @@ def chat():
             "pipeline_id": None,
             "case_id": case_id,
             "rlhf_pending": rlhf_pending,
+            "rag_boost": defense.get('rag_boost', 0.0),
+            "rag_cases_found": defense.get('rag_cases_found', 0),
         })
 
     # 2. Ollama chat reply — pipeline is NOT started here; it fires only on bad rating
@@ -302,6 +333,8 @@ def chat():
         "pipeline_id":    None,
         "case_id":        case_id,
         "rlhf_pending":   rlhf_pending,
+        "rag_boost":      defense.get('rag_boost', 0.0),
+        "rag_cases_found": defense.get('rag_cases_found', 0),
         "verdict":        None,
         "display_label":  None,
         "avg_agreement":  None,
@@ -517,6 +550,28 @@ def buffer_stats():
 @app.route("/", methods=["GET"])
 def root():
     return jsonify({"message": "Backend is running", "endpoint": "/api/analyze"}), 200
+
+
+@app.route('/api/rag/stats', methods=['GET', 'OPTIONS'])
+def rag_stats():
+    if request.method == 'OPTIONS':
+        return ('', 204)
+    uid, role, _ = get_firebase_uid(request)
+    if not uid or role != 'admin':
+        return jsonify({'error': 'Admin role required'}), 403
+
+    cases = get_confirmed_dangerous_cases(limit=500)
+    block_count    = sum(1 for c in cases if c['verdict'] == 'BLOCK')
+    hesitate_count = sum(1 for c in cases if c['verdict'] == 'HESITATE')
+    avg_risk = round(sum(c['risk_score'] for c in cases) / len(cases), 3) if cases else 0.0
+
+    return jsonify({
+        'total_cases':    len(cases),
+        'block_count':    block_count,
+        'hesitate_count': hesitate_count,
+        'avg_risk':       avg_risk,
+        'recent_cases':   cases[:20],
+    }), 200
 
 
 @app.route('/api/retrain/status', methods=['GET'])

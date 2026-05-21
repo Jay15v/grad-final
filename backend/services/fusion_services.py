@@ -96,7 +96,7 @@ def fuse_prompt(prompt: str):
             print("DEBUG: claims =", len(claims))
 
         except Exception as e:
-            print("⚠️ Decomposition/Reasoning error:", str(e))
+            print("[warn] Decomposition/Reasoning error:", str(e))
             traceback.print_exc()
 
         rag_results = {
@@ -120,20 +120,20 @@ def fuse_prompt(prompt: str):
                 rag_results = verify_claims_with_rag_google(claims, k=5, refresh_web=True) or rag_results
             else:
                 if not RAG_ENABLED:
-                    print("⚠️ RAG_DISABLED: Missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ID")
+                    print("[warn] RAG_DISABLED: Missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ID")
                 if not claims:
-                    print("⚠️ NO_CLAIMS: Skipping RAG because claims list is empty")
+                    print("[warn] NO_CLAIMS: Skipping RAG because claims list is empty")
         except Exception as e:
-            print("⚠️ RAG error:", str(e))
+            print("[warn] RAG error:", str(e))
             traceback.print_exc()
 
         try:
             if rag_results.get("results"):
                 verification_results = verify_rag_output(rag_results) or verification_results
             else:
-                print("⚠️ NO_RAG_RESULTS: Skipping verification because RAG returned no results")
+                print("[warn] NO_RAG_RESULTS: Skipping verification because RAG returned no results")
         except Exception as e:
-            print("⚠️ Verification error:", str(e))
+            print("[warn] Verification error:", str(e))
             traceback.print_exc()
 
         response["decomposition"] = decomposition

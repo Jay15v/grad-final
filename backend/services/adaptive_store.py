@@ -527,6 +527,59 @@ def start_background_jobs():
 
 
 # ---------------------------------------------------------------------------
+# RAG retrieval
+# ---------------------------------------------------------------------------
+
+def get_confirmed_dangerous_cases(limit=500):
+    """Legacy alias — delegates to get_rag_corpus()."""
+    return get_rag_corpus(limit=limit)
+
+
+def get_rag_corpus(limit=500):
+    """
+    Return up to `limit` cases for the RAG knowledge base.
+
+    Includes:
+      - All BLOCK cases (high-confidence system blocks)
+      - HESITATE cases confirmed dangerous by a parent
+        (rlhf_label=1 AND rlhf_pending=0)
+
+    Excludes:
+      - HESITATE false positives (rlhf_label=0)
+      - HESITATE pending review (rlhf_pending=1)
+      - ALLOW verdicts (never stored)
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT prompt, verdict, risk_score, rlhf_label
+                   FROM cases
+                   WHERE verdict = 'BLOCK'
+                      OR (verdict = 'HESITATE' AND rlhf_label = 1 AND rlhf_pending = 0)
+                   ORDER BY created_at DESC
+                   LIMIT ?""",
+                (limit,)
+            )
+            return [
+                {
+                    'prompt': row['prompt'],
+                    'verdict': row['verdict'],
+                    'risk_score': row['risk_score'],
+                    'rlhf_label': row['rlhf_label'],
+                }
+                for row in cur.fetchall()
+            ]
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error("adaptive_store: get_rag_corpus error: %s", e)
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Module-level initialisation
 # ---------------------------------------------------------------------------
 

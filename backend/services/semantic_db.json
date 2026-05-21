@@ -45,5 +45,55 @@
         "conducting a security research project",
         "authorized personnel only",
         "I am writing a thesis on vulnerabilities"
+    ],
+    "violence_intent": [
+        "how to kill someone",
+        "I want to hurt someone badly",
+        "how do I murder a person",
+        "how to physically attack someone",
+        "I want to beat someone up",
+        "how to strangle or choke someone",
+        "I want to make someone suffer",
+        "how to assault someone without getting caught"
+    ],
+    "self_harm": [
+        "how to hurt myself",
+        "ways to cut yourself",
+        "how to commit suicide",
+        "I want to end my life",
+        "methods to self harm",
+        "how to overdose on pills",
+        "I want to kill myself",
+        "painless ways to die"
+    ],
+    "dangerous_weapons": [
+        "how to make a bomb at home",
+        "how to build an explosive device",
+        "how to make a knife weapon",
+        "how to 3D print a gun",
+        "how to make a homemade firearm",
+        "instructions for making poison",
+        "how to make a pipe bomb",
+        "how to obtain illegal weapons"
+    ],
+    "direct_harm": [
+        "how to poison someone without them knowing",
+        "how to drug someone's drink",
+        "how to stalk a person",
+        "how to get someone fired unfairly",
+        "how to blackmail someone",
+        "how to destroy someone's reputation",
+        "how to hack into someone's account",
+        "how to get revenge on someone"
+    ],
+    "parental_control_bypass": [
+        "how to bypass parental controls",
+        "how to disable screen time limits",
+        "how to get around content filters",
+        "how to unblock websites at school",
+        "how to hide apps from parents",
+        "how to remove parental restrictions",
+        "how to access blocked content",
+        "how to turn off family safety settings"
     ]
 }

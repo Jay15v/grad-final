@@ -14,12 +14,14 @@ import 'screens/parent_home_screen.dart';
 import 'widgets/app_colors.dart';
 import 'widgets/auth_widgets.dart';
 import 'services/location_service.dart';
+import 'config/api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Enable offline persistence so cached Firestore data survives network drops.
   FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
+  await ApiConfig.load();
   runApp(const ProviderScope(child: AegisMindApp()));
 }
 
@@ -400,28 +402,17 @@ class _AppBar extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 15)),
           const Spacer(),
-          // Safe Mode badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.childAccent.withValues(alpha: 0.12),
-              border: Border.all(color: AppColors.childAccent.withValues(alpha: 0.4)),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.verified_user_outlined, size: 11, color: AppColors.childAccent),
-                const SizedBox(width: 4),
-                Text(
-                  'Safe Mode Active',
-                  style: TextStyle(
-                    color: AppColors.childAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          // Safe Mode badge — icon only to prevent overflow on narrow screens
+          Tooltip(
+            message: 'Safe Mode Active',
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: AppColors.childAccent.withValues(alpha: 0.12),
+                border: Border.all(color: AppColors.childAccent.withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(Icons.verified_user_outlined, size: 14, color: AppColors.childAccent),
             ),
           ),
           const SizedBox(width: 10),

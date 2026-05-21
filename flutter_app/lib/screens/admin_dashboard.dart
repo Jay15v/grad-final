@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
@@ -23,7 +26,7 @@ class _AdminDashboardState extends State<AdminDashboard>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -66,6 +69,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                   ),
                   const _AlertsTab(),
                   const _AnalyticsTab(),
+                  const _RagTab(),
                 ],
               ),
             ),
@@ -255,6 +259,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           Tab(text: 'Create Child'),
           Tab(text: 'Alerts'),
           Tab(text: 'Analytics'),
+          Tab(text: 'RAG Monitor'),
         ],
       ),
     );
@@ -1726,6 +1731,305 @@ class _StatCard extends StatelessWidget {
             style: TextStyle(color: AppColors.textMuted, fontSize: 9),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── RAG Monitor Tab ──────────────────────────────────────────────────────────
+
+class _RagTab extends StatefulWidget {
+  const _RagTab();
+
+  @override
+  State<_RagTab> createState() => _RagTabState();
+}
+
+class _RagTabState extends State<_RagTab> {
+  bool    _loading = true;
+  String? _error;
+
+  int    _totalCases    = 0;
+  int    _blockCount    = 0;
+  int    _hesitateCount = 0;
+  double _avgRisk       = 0.0;
+  List<Map<String, dynamic>> _recentCases = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final user  = FirebaseAuth.instance.currentUser;
+      final token = user != null ? await user.getIdToken() : null;
+
+      final resp = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/api/rag/stats'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      if (resp.statusCode != 200) {
+        setState(() { _loading = false; _error = 'Backend error ${resp.statusCode}'; });
+        return;
+      }
+
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      setState(() {
+        _loading      = false;
+        _totalCases   = (data['total_cases']    as num?)?.toInt() ?? 0;
+        _blockCount   = (data['block_count']    as num?)?.toInt() ?? 0;
+        _hesitateCount= (data['hesitate_count'] as num?)?.toInt() ?? 0;
+        _avgRisk      = (data['avg_risk']       as num?)?.toDouble() ?? 0.0;
+        _recentCases  = List<Map<String, dynamic>>.from(
+            (data['recent_cases'] as List? ?? []));
+      });
+    } catch (e) {
+      setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, color: AppColors.danger, size: 40),
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: AppColors.danger, fontSize: 13),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppColors.accent,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ──────────────────────────────────────────────────────
+            Row(
+              children: [
+                _sectionLabel('Internal RAG — Confirmed Dangerous Cases'),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _load,
+                  child: Icon(Icons.refresh, color: AppColors.accent, size: 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Cases with rlhf_label=1 used to boost risk scores at inference time.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+            ),
+            const SizedBox(height: 14),
+
+            // ── Stats row ────────────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(child: _statChip('Total', '$_totalCases',
+                    Icons.dataset_outlined, AppColors.accent)),
+                const SizedBox(width: 8),
+                Expanded(child: _statChip('BLOCK', '$_blockCount',
+                    Icons.block_outlined, AppColors.danger)),
+                const SizedBox(width: 8),
+                Expanded(child: _statChip('HESITATE', '$_hesitateCount',
+                    Icons.warning_amber_outlined, AppColors.warning)),
+                const SizedBox(width: 8),
+                Expanded(child: _statChip('Avg Risk',
+                    '${(_avgRisk * 100).toStringAsFixed(0)}%',
+                    Icons.speed_outlined, AppColors.success)),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ── RAG boost explanation ────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'At inference, TF-IDF cosine similarity is computed between '
+                      'the incoming prompt and every case below. '
+                      'boost = Σ(similarity × risk) / top_k, capped at +0.20. '
+                      'Only cases with rlhf_label=1 (confirmed dangerous) are used.',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 11, height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Case list ────────────────────────────────────────────────────
+            _sectionLabel('Confirmed Dangerous Cases (most recent 20)'),
+            const SizedBox(height: 10),
+
+            if (_recentCases.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.history_edu_outlined,
+                          color: AppColors.textMuted, size: 40),
+                      const SizedBox(height: 10),
+                      Text('No confirmed dangerous cases yet.',
+                          style: TextStyle(
+                              color: AppColors.textMuted, fontSize: 13)),
+                      const SizedBox(height: 4),
+                      Text(
+                          'Cases appear here after a parent marks a HESITATE prompt\n'
+                          'as dangerous (rlhf_label=1).',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: AppColors.textMuted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _recentCases.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _CaseCard(data: _recentCases[i]),
+              ),
+
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) => Text(
+        text,
+        style: const TextStyle(
+            color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+      );
+
+  Widget _statChip(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 13),
+              const SizedBox(width: 5),
+              Text(value,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(label,
+              style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── RAG Case Card ────────────────────────────────────────────────────────────
+
+class _CaseCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _CaseCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final verdict   = data['verdict'] as String? ?? '?';
+    final risk      = (data['risk_score'] as num?)?.toDouble() ?? 0.0;
+    final prompt    = data['prompt'] as String? ?? '';
+
+    final isBlock   = verdict == 'BLOCK';
+    final color     = isBlock ? AppColors.danger : AppColors.warning;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Verdict chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Text(verdict,
+                style: TextStyle(
+                    color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 10),
+          // Prompt text
+          Expanded(
+            child: Text(
+              prompt,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 12, height: 1.4),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Risk score
+          Text(
+            '${(risk * 100).toStringAsFixed(0)}%',
+            style: TextStyle(
+                color: color, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),

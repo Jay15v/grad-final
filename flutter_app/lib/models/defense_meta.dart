@@ -4,6 +4,8 @@ class DefenseMeta {
   final String semanticDomain;
   final double semanticSimilarity;
   final double finalRisk;
+  final double ragBoost;
+  final int ragCasesFound;
 
   DefenseMeta({
     required this.decision,
@@ -11,6 +13,8 @@ class DefenseMeta {
     required this.semanticDomain,
     required this.semanticSimilarity,
     required this.finalRisk,
+    this.ragBoost = 0.0,
+    this.ragCasesFound = 0,
   });
 
   factory DefenseMeta.fromJson(Map<String, dynamic> json) {
@@ -20,6 +24,8 @@ class DefenseMeta {
       semanticDomain: json['semantic_domain'] as String? ?? '',
       semanticSimilarity: (json['semantic_similarity'] as num?)?.toDouble() ?? 0.0,
       finalRisk: (json['final_risk'] as num?)?.toDouble() ?? 0.0,
+      ragBoost: (json['rag_boost'] as num?)?.toDouble() ?? 0.0,
+      ragCasesFound: (json['rag_cases_found'] as num?)?.toInt() ?? 0,
     );
   }
 

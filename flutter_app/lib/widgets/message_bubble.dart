@@ -119,8 +119,8 @@ class _BlockedBubble extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF450A0A).withOpacity(0.4),
-              border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+              color: const Color(0xFF450A0A).withValues(alpha: 0.4),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(4),
                 topRight: Radius.circular(16),
@@ -144,8 +144,12 @@ class _BlockedBubble extends StatelessWidget {
                     'Risk ${meta.riskPercent}%  ·  ${meta.domainReadable}',
                     style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.danger.withOpacity(0.7)),
+                        color: AppColors.danger.withValues(alpha: 0.7)),
                   ),
+                  if (meta.ragBoost > 0.05) ...[
+                    const SizedBox(height: 6),
+                    _RagChip(meta: meta),
+                  ],
                 ],
               ],
             ),
@@ -261,6 +265,12 @@ class _AssistantBubbleState extends State<_AssistantBubble> {
             const SizedBox(height: 4),
             _DefenseBadge(meta: msg.defenseMeta!),
           ],
+          if (msg.defenseMeta != null &&
+              !msg.isLoading &&
+              msg.defenseMeta!.ragBoost > 0.05) ...[
+            const SizedBox(height: 4),
+            _RagChip(meta: msg.defenseMeta!),
+          ],
           if (msg.verdict != null && !msg.isLoading) ...[
             const SizedBox(height: 4),
             VerdictBanner(verdict: msg.verdict!),
@@ -282,13 +292,13 @@ class _DecisionChip extends StatelessWidget {
     Color bg;
     Color text;
     if (decision == 'ALLOW') {
-      bg = const Color(0xFF14532D).withOpacity(0.5);
+      bg = const Color(0xFF14532D).withValues(alpha: 0.5);
       text = const Color(0xFF86EFAC);
     } else if (decision == 'HESITATE') {
-      bg = const Color(0xFF713F12).withOpacity(0.5);
+      bg = const Color(0xFF713F12).withValues(alpha: 0.5);
       text = const Color(0xFFFDE68A);
     } else {
-      bg = const Color(0xFF450A0A).withOpacity(0.5);
+      bg = const Color(0xFF450A0A).withValues(alpha: 0.5);
       text = const Color(0xFFFCA5A5);
     }
     return Container(
@@ -319,9 +329,9 @@ class _DefenseBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -331,6 +341,37 @@ class _DefenseBadge extends StatelessWidget {
           Text(
             'Risk ${meta.riskPercent}%  ·  ${meta.domainReadable}',
             style: TextStyle(fontSize: 10, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RagChip extends StatelessWidget {
+  final DefenseMeta meta;
+  const _RagChip({required this.meta});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFFF59E0B); // amber-500
+    final boostPct = (meta.ragBoost * 100).toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.history_edu_outlined, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(
+            'RAG: +$boostPct% boost from ${meta.ragCasesFound} similar past cases',
+            style: const TextStyle(fontSize: 10, color: color),
           ),
         ],
       ),
