@@ -15,7 +15,7 @@ from flask_cors import CORS
 from services.fusion_services import fuse_prompt
 from services.model_services import bert_predict
 from services.semantic_services import semantic_risk
-from services.llm_service import call_ollama_chat
+from services.llm_service import call_ollama_chat, call_ollama_block_fallback
 from services.decomposition_service import decompose_prompt
 from services.reasoning_service import generate_reasoning_from_steps, generate_claims_from_reasoning
 from services.rag_service import verify_claims_with_rag_google
@@ -31,21 +31,28 @@ except ImportError:
     _firebase_available = False
     logging.warning("firebase_admin not installed — token verification disabled")
 
-# Step 5, 6, 7: resolve path and initialize
+# Step 5, 6, 7: initialize Firebase from JSON env var (Railway) or file path (local)
 if _firebase_available:
-    sa_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
-    if sa_path and not os.path.isabs(sa_path):
-        sa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), sa_path)
-    if sa_path and os.path.exists(sa_path):
-        try:
-            if not firebase_admin._apps:
-                cred = credentials.Certificate(sa_path)
+    try:
+        if not firebase_admin._apps:
+            sa_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+            if sa_json:
+                import json
+                cred = credentials.Certificate(json.loads(sa_json))
                 firebase_admin.initialize_app(cred)
-                print("✅ Firebase Admin initialized successfully")
-        except Exception as e:
-            logging.warning(f"Firebase Admin init failed: {e}")
-    else:
-        logging.warning(f"serviceAccount.json not found at: {sa_path}")
+                print("✅ Firebase Admin initialized from env var")
+            else:
+                sa_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH')
+                if sa_path and not os.path.isabs(sa_path):
+                    sa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), sa_path)
+                if sa_path and os.path.exists(sa_path):
+                    cred = credentials.Certificate(sa_path)
+                    firebase_admin.initialize_app(cred)
+                    print("✅ Firebase Admin initialized from file")
+                else:
+                    logging.warning(f"Firebase: no JSON env var and no file at: {sa_path}")
+    except Exception as e:
+        logging.warning(f"Firebase Admin init failed: {e}")
 
 from services.consensus_service import cross_model_validate
 from services.notification_service import notify_parent_if_needed
@@ -87,32 +94,38 @@ pipeline_store: dict = {}
 # Helper: run the quick defense check
 # ------------------------------------------------------------------
 def _defense_check(message: str) -> dict:
+    print("[DEFENSE_CHECK] loaded version with threshold=0.50", flush=True)
     bert_risk = bert_predict(message)
     final_risk = bert_risk
     semantic_domain, semantic_similarity = semantic_risk(message)
 
     if semantic_domain == "roleplay_jailbreak":
-        final_risk = max(bert_risk * 0.8, 0.35)
+        final_risk = max(bert_risk * 0.65, 0.35)
     elif semantic_domain == "direct_injection":
         final_risk = max(bert_risk * 1.2, 0.50)
     elif semantic_domain == "obfuscation_payload":
         final_risk = max(bert_risk * 1.3, 0.55)
     elif semantic_domain == "virtualization_hypotheticals":
-        final_risk = bert_risk * 0.6
+        final_risk = bert_risk * 0.45
     elif semantic_domain == "violence_intent":
         final_risk = max(bert_risk * 1.5, 0.65)
     elif semantic_domain == "self_harm":
-        final_risk = max(bert_risk * 1.5, 0.65)  # always block self-harm
+        final_risk = max(bert_risk * 1.5, 0.65)
     elif semantic_domain == "dangerous_weapons":
         final_risk = max(bert_risk * 1.4, 0.65)
     elif semantic_domain == "direct_harm":
-        final_risk = max(bert_risk * 1.2, 0.40)
+        if semantic_similarity < 0.65:
+            final_risk = bert_risk * 0.55   # weak match → hesitate
+        else:
+            final_risk = max(bert_risk * 1.2, 0.40)  # strong match → amplify
     elif semantic_domain == "parental_control_bypass":
         final_risk = max(bert_risk * 1.2, 0.40)
     elif semantic_domain == "technical_exploit":
-        final_risk = max(bert_risk * 1.2, 0.40)
+        final_risk = bert_risk * 0.55
     elif semantic_domain == "social_engineering":
-        final_risk = max(bert_risk * 1.0, 0.30)
+        final_risk = bert_risk * 0.55
+    elif semantic_domain == "educational_security":
+        final_risk = bert_risk * 0.30
 
     if final_risk >= BLOCK_THRESHOLD:
         decision = "BLOCK"
@@ -252,6 +265,7 @@ def analyze():
 # ------------------------------------------------------------------
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
 def chat():
+    print("===CHAT V2 CALLED===", flush=True)
     if request.method == "OPTIONS":
         return ("", 204)
 
@@ -282,14 +296,23 @@ def chat():
     except Exception as e:
         logging.warning(f"log_case failed in chat: {e}")
 
+    print("===DECISION CHECK===", decision, flush=True)
     if decision == "BLOCK":
+        print("===BLOCK BRANCH ENTERED===", flush=True)
+        fallback_reply = call_ollama_block_fallback(message)
+        print("===FALLBACK REPLY===", repr(fallback_reply[:80]) if fallback_reply else "EMPTY", flush=True)
+        logging.info(f"[BLOCK_FALLBACK] reply={repr(fallback_reply[:120]) if fallback_reply else 'EMPTY'}")
         return jsonify({
-            "decision": "BLOCK",
-            "reply": None,
-            "defense_meta": defense,
-            "pipeline_id": None,
-            "case_id": case_id,
-            "rlhf_pending": rlhf_pending,
+            "decision":       "ALLOW",
+            "reply":          fallback_reply,
+            "defense_meta":   None,
+            "pipeline_id":    None,
+            "case_id":        case_id,
+            "rlhf_pending":   False,
+            "verdict":        None,
+            "display_label":  None,
+            "avg_agreement":  None,
+            "model_statuses": None,
         })
 
     # 2. Ollama chat reply — pipeline is NOT started here; it fires only on bad rating
@@ -414,6 +437,8 @@ def feedback(case_id):
     if uid is None:
         uid  = request.headers.get('X-Firebase-UID', '').strip()
         role = request.headers.get('X-Firebase-Role', '').strip().lower()
+    elif not role:
+        role = request.headers.get('X-Firebase-Role', '').strip().lower()
     if role != 'parent':
         return jsonify({"error": "Forbidden"}), 403
     data = request.get_json(force=True)
@@ -445,12 +470,17 @@ def pending():
         return ("", 204)
     uid, role, _ = get_firebase_uid(request)
 
-    # Fallback: when Firebase Admin isn't initialized, accept UID/role from headers
+    # Fallback: when Firebase Admin isn't initialized, or token verified but role
+    # missing in Firestore, accept UID/role from headers.
     if uid is None:
         uid  = request.headers.get('X-Firebase-UID', '').strip()
         role = request.headers.get('X-Firebase-Role', '').strip().lower()
         if uid and role:
             print(f"[PENDING] Using header fallback: uid={uid}, role={role}", flush=True)
+    elif not role:
+        role = request.headers.get('X-Firebase-Role', '').strip().lower()
+        if role:
+            print(f"[PENDING] Role from header (uid verified via token): uid={uid}, role={role}", flush=True)
 
     print(f"[PENDING] uid={uid}, role={role}", flush=True)
     if not uid:

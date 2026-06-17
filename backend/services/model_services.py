@@ -1,43 +1,37 @@
 import os
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from huggingface_hub import login
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_DIR = os.path.join(BASE_DIR, "models", "bert_prompt_guard")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+HF_MODEL_REPO = os.environ.get("HF_MODEL_REPO")  # e.g. "yourname/bert-prompt-guard"
 
-print("Loading model from:", MODEL_DIR)
+if not HF_MODEL_REPO:
+    raise EnvironmentError("HF_MODEL_REPO env var is not set")
 
-if not os.path.exists(MODEL_DIR):
-    raise FileNotFoundError(f"Model directory not found: {MODEL_DIR}")
+if HF_TOKEN and HF_TOKEN != "your_huggingface_token_here":
+    login(token=HF_TOKEN, add_to_git_credential=False)
 
-print("🔄 Loading tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(
-    MODEL_DIR,
-    local_files_only=True
-)
+print(f"Loading model from HuggingFace Hub: {HF_MODEL_REPO}")
 
-print("🔄 Loading model...")
-model = AutoModelForSequenceClassification.from_pretrained(
-    MODEL_DIR,
-    local_files_only=True
-).to(DEVICE)
+print("Loading tokenizer...")
+tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_REPO)
 
+print("Loading model...")
+model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_REPO).to(DEVICE)
 model.eval()
-print("✅ BERT model ready")
+print("BERT model ready")
 
 
 def bert_predict(prompt: str) -> float:
-    """
-    Returns probability that the prompt is unsafe.
-    """
     enc = tokenizer(
         prompt,
         return_tensors="pt",
         truncation=True,
         padding=True,
-        max_length=256
+        max_length=256,
     ).to(DEVICE)
 
     with torch.no_grad():

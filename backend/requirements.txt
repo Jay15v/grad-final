@@ -1,4 +1,8 @@
 annotated-doc==0.0.4
+datasets
+firebase-admin
+gunicorn
+python-dotenv
 anyio==4.12.1
 beautifulsoup4==4.14.3
 blinker==1.9.0

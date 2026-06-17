@@ -1,38 +1,49 @@
 """
-Cross-Model Router: sends a prompt to multiple Ollama models concurrently
+Cross-Model Router: sends a prompt to multiple Groq-hosted models concurrently
 and returns all responses in a single dict.
 """
 
 from __future__ import annotations
 
+import os
 import requests
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODELS = ["phi3", "llama3", "mistral"]
-_MODEL_TIMEOUT = 180  # seconds per model; llama3/mistral need time to swap in from disk
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "meta-llama/llama-4-scout-17b-16e-instruct"]
+_MODEL_TIMEOUT = 30
 
 
 def _query_single_model(model: str, prompt: str) -> tuple[str, str]:
     try:
         response = requests.post(
-            OLLAMA_URL,
-            json={"model": model, "prompt": prompt, "stream": False},
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.0,
+            },
             timeout=_MODEL_TIMEOUT,
         )
         response.raise_for_status()
-        data = response.json()
-        text = data.get("response", "")
+        text = response.json()["choices"][0]["message"]["content"]
         print(f"[CROSS-MODEL] {model}: ok ({len(text)} chars)", flush=True)
         return model, text
-    except requests.RequestException as exc:
+    except Exception as exc:
         print(f"[CROSS-MODEL] {model}: FAILED — {type(exc).__name__}: {exc}", flush=True)
         return model, f"error: {exc}"
 
 
 def query_all_models(prompt: str) -> dict[str, str]:
     """
-    Query models sequentially so Ollama can fully swap each one in/out.
-    Parallel requests cause Ollama to queue them anyway, making timeouts compound.
+    Query all three models. Groq handles each independently so we run them
+    sequentially to stay within rate limits on the free tier.
     """
     results: dict[str, str] = {}
     for model in MODELS:

@@ -6,18 +6,14 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 SUPPORT_T = 0.55
 UNCERTAIN_T = 0.40
 
-MODEL_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "models",
-    "deberta_nli_verifier"
-)
+HF_NLI_MODEL = os.environ.get("HF_NLI_MODEL", "cross-encoder/nli-deberta-base")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"[Verification] Loading model from: {MODEL_PATH}")
+print(f"[Verification] Loading model from HuggingFace Hub: {HF_NLI_MODEL}")
 
-tokenizer_nli = AutoTokenizer.from_pretrained(MODEL_PATH)
-model_nli = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
+tokenizer_nli = AutoTokenizer.from_pretrained(HF_NLI_MODEL)
+model_nli = AutoModelForSequenceClassification.from_pretrained(HF_NLI_MODEL)
 model_nli = model_nli.to(device)
 model_nli.eval()
 
