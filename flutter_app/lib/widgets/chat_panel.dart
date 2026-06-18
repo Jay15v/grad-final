@@ -110,7 +110,7 @@ class _ChatPanelState extends State<ChatPanel> {
           _messages.add(ChatMessage(
             id: UniqueKey().toString(),
             role: MessageRole.blocked,
-            content: '',
+            content: response.reply ?? '',
             decision: 'BLOCK',
             defenseMeta: response.defenseMeta,
           ));

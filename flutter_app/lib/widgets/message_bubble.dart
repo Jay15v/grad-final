@@ -132,7 +132,9 @@ class _BlockedBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'This message was blocked by the defense pipeline.',
+                  message.content.isNotEmpty
+                      ? message.content
+                      : 'This message was blocked by the defense pipeline.',
                   style: TextStyle(
                       color: AppColors.dangerLight,
                       fontSize: 13,
@@ -189,7 +191,7 @@ class _AssistantBubbleState extends State<_AssistantBubble> {
               const SizedBox(width: 4),
               Text('AegisMind',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-              if (msg.decision != null) ...[
+              if (msg.decision == 'ALLOW') ...[
                 const SizedBox(width: 6),
                 _DecisionChip(decision: msg.decision!),
               ],
