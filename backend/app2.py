@@ -303,9 +303,9 @@ def chat():
         print("===FALLBACK REPLY===", repr(fallback_reply[:80]) if fallback_reply else "EMPTY", flush=True)
         logging.info(f"[BLOCK_FALLBACK] reply={repr(fallback_reply[:120]) if fallback_reply else 'EMPTY'}")
         return jsonify({
-            "decision":       "BLOCK",
+            "decision":       "ALLOW",
             "reply":          fallback_reply,
-            "defense_meta":   defense,
+            "defense_meta":   None,
             "pipeline_id":    None,
             "case_id":        case_id,
             "rlhf_pending":   False,
