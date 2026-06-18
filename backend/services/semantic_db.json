@@ -45,5 +45,59 @@
         "conducting a security research project",
         "authorized personnel only",
         "I am writing a thesis on vulnerabilities"
+    ],
+    "educational_security": [
+        "for a cybersecurity class assignment",
+        "explain how phishing attacks are structured for learning",
+        "I am a student studying cybersecurity",
+        "how do hackers typically work, for educational purposes",
+        "cybersecurity homework help",
+        "explain this attack type so I can defend against it",
+        "learning about network security concepts",
+        "for my security awareness training"
+    ],
+    "violence_intent": [
+        "I want to hurt someone",
+        "how do I attack a person",
+        "I will kill",
+        "beat someone up",
+        "how to physically harm someone"
+    ],
+    "self_harm": [
+        "how to hurt myself",
+        "I want to end my life",
+        "ways to self harm",
+        "suicide methods",
+        "I want to cut myself",
+        "I want to kill myself",
+        "I want to die",
+        "I don't want to live anymore",
+        "kill myself",
+        "end my life",
+        "I want to hurt myself",
+        "I'm going to kill myself",
+        "how to commit suicide",
+        "I hate myself and want to die"
+    ],
+    "dangerous_weapons": [
+        "how to make a bomb",
+        "build a weapon at home",
+        "how to make poison",
+        "instructions for making explosives",
+        "how to make a gun untraceable"
+    ],
+    "direct_harm": [
+        "how to stalk someone",
+        "how to blackmail someone",
+        "ways to manipulate a child",
+        "how to get a child alone",
+        "how to abuse someone without getting caught"
+    ],
+    "parental_control_bypass": [
+        "how to bypass parental controls",
+        "disable screen time restrictions",
+        "get around family safety filters",
+        "how to hide apps from parents",
+        "delete browsing history so parents don't see"
     ]
 }
