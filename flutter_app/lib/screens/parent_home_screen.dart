@@ -7,7 +7,7 @@ import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/app_colors.dart';
 import '../widgets/auth_widgets.dart';
-import '../main.dart' show HomeShell, AuthGate;
+import '../main.dart' show HomeShell, ThemeToggleButton;
 import '../config/api_config.dart';
 import 'child_location_screen.dart';
 
@@ -24,7 +24,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
 
   List<Map<String, dynamic>> _pendingCases = [];
   bool _loadingPending = false;
-  final Set<int> _favoritedCaseIds = {};
+  final Set<String> _favoritedCaseIds = {};
   late AnimationController _pulseController;
 
   @override
@@ -123,286 +123,393 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
     }
   }
 
-  Widget _buildPendingSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section header
-        Row(
-          children: [
-            const Text(
-              'Pending Reviews',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Pulsing orange dot
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                return Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.orange.withOpacity(
-                      0.4 + (_pulseController.value * 0.6),
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            // Count badge
-            if (_pendingCases.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+  Widget _buildBlockedAlertCard(Map<String, dynamic> alert) {
+    final docId = alert['id'] as String;
+    final prompt = alert['prompt'] as String? ?? '';
+    final riskScore = (alert['risk_score'] as num?)?.toDouble() ?? 0.0;
+    final category = (alert['semantic_category'] as String? ?? '').replaceAll('_', ' ');
+    final ts = (alert['timestamp'] as num?) ?? 0;
+    final dt = DateTime.fromMillisecondsSinceEpoch((ts * 1000).toInt());
+    final dateStr =
+        '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.4), width: 1.5),
+        color: Colors.red.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
+              const SizedBox(width: 6),
+              const Expanded(
                 child: Text(
-                  '${_pendingCases.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+                  'Blocked & Handled Safely',
+                  style: TextStyle(
+                    color: Colors.red,
                     fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
                 ),
               ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Loading state
-        if (_loadingPending)
-          const Center(child: CircularProgressIndicator()),
-
-        // Empty state
-        if (!_loadingPending && _pendingCases.isEmpty)
-          const Text(
-            'No pending reviews',
-            style: TextStyle(color: Colors.grey),
+              Text(
+                dateStr,
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
           ),
-
-        // Pending cases list
-        if (!_loadingPending && _pendingCases.isNotEmpty)
-          ...(_pendingCases.map((c) {
-            final riskScore = (c['risk_score'] as num).toDouble();
-            final riskPercent = '${(riskScore * 100).toStringAsFixed(0)}%';
-            final createdAt = DateTime.fromMillisecondsSinceEpoch(
-              ((c['created_at'] as num) * 1000).toInt(),
-            );
-            final dateStr =
-                '${createdAt.day}/${createdAt.month}/${createdAt.year} '
-                '${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}';
-            final caseId = c['case_id'] as int;
-            final isFavorited = _favoritedCaseIds.contains(caseId);
-
-            return Dismissible(
-              key: ValueKey(caseId),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 24),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+          const SizedBox(height: 4),
+          const Text(
+            'AegisMind detected a sensitive message and responded safely. No action required — you may want to check in with your child.',
+            style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              prompt,
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (category.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    category,
+                    style: const TextStyle(fontSize: 11, color: Colors.red),
+                  ),
                 ),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.delete_outline, color: Colors.red, size: 26),
-                    SizedBox(height: 4),
-                    Text(
-                      'Dismiss',
-                      style: TextStyle(color: Colors.red, fontSize: 11),
-                    ),
-                  ],
-                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                'Risk ${(riskScore * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
               ),
-              onDismissed: (_) {
-                final removedCase = c;
-                final idx = _pendingCases.indexOf(c);
-                setState(() {
-                  _pendingCases.removeWhere((x) => x['case_id'] == caseId);
-                  _favoritedCaseIds.remove(caseId);
-                });
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Case dismissed'),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    duration: const Duration(seconds: 4),
-                    action: SnackBarAction(
-                      label: 'Undo',
-                      onPressed: () {
-                        setState(() {
-                          _pendingCases.insert(
-                            idx.clamp(0, _pendingCases.length),
-                            removedCase,
-                          );
-                        });
-                      },
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _firestoreService.acknowledgeBlockedAlert(docId),
+              icon: const Icon(Icons.check, size: 15),
+              label: const Text('Acknowledge & Dismiss'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+                foregroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlockedAlertsSection(String parentId) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getBlockedAlerts(parentId),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.isEmpty) return const SizedBox.shrink();
+        final alerts = snap.data!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.shield_outlined, color: Colors.red, size: 18),
+                const SizedBox(width: 6),
+                const Text(
+                  'Safety Alerts',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${alerts.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                );
-              },
-              child: AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  final borderColor = Color.lerp(
-                    Colors.orange,
-                    Colors.orange.withOpacity(0.3),
-                    _pulseController.value,
-                  )!;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...alerts.map(_buildBlockedAlertCard),
+            const SizedBox(height: 12),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPendingSection(String parentId) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getPendingReviews(parentId),
+      builder: (context, snap) {
+        final cases = snap.data ?? [];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Pending Reviews',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) => Container(
+                    width: 10,
+                    height: 10,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: borderColor, width: 2),
-                      color: Colors.orange.withOpacity(0.05),
+                      shape: BoxShape.circle,
+                      color: Colors.orange.withValues(
+                          alpha: 0.4 + (_pulseController.value * 0.6)),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title row with favorite button
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Review Required — Uncertain Content Detected',
-                                style: TextStyle(
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => setState(() {
-                                if (isFavorited) {
-                                  _favoritedCaseIds.remove(caseId);
-                                } else {
-                                  _favoritedCaseIds.add(caseId);
-                                }
-                              }),
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Icon(
-                                  isFavorited
-                                      ? Icons.star
-                                      : Icons.star_outline,
-                                  color: isFavorited
-                                      ? Colors.amber
-                                      : AppColors.textMuted,
-                                  size: 22,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Prompt text
-                        Text(
-                          c['prompt'] as String,
-                          style: const TextStyle(fontSize: 15),
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Risk score
-                        Text(
-                          'Risk Score: $riskPercent',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-
-                        // Risk bar
-                        LinearProgressIndicator(
-                          value: riskScore,
-                          backgroundColor: Colors.grey.withOpacity(0.3),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            riskScore > 0.7
-                                ? Colors.red
-                                : riskScore > 0.4
-                                    ? Colors.orange
-                                    : Colors.green,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-
-                        // Date
-                        Text(
-                          'Submitted: $dateStr',
-                          style: const TextStyle(
-                            color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (cases.isNotEmpty)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Text('${cases.length}',
+                        style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (!snap.hasData)
+              const Center(child: CircularProgressIndicator()),
+            if (snap.hasData && cases.isEmpty)
+              const Text('No pending reviews',
+                  style: TextStyle(color: Colors.grey)),
+            if (snap.hasData && cases.isNotEmpty)
+              ...cases.map((c) {
+                final docId = c['id'] as String;
+                final riskScore = (c['risk_score'] as num? ?? 0).toDouble();
+                final riskPercent =
+                    '${(riskScore * 100).toStringAsFixed(0)}%';
+                final ts = (c['timestamp'] as num?) ?? 0;
+                final createdAt =
+                    DateTime.fromMillisecondsSinceEpoch((ts * 1000).toInt());
+                final dateStr =
+                    '${createdAt.day}/${createdAt.month}/${createdAt.year} '
+                    '${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}';
+                final isFavorited = _favoritedCaseIds.contains(docId);
 
-                        // Feedback buttons
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () =>
-                                    submitFeedback(caseId, 1),
-                                icon: const Icon(Icons.dangerous_outlined,
-                                    size: 16),
-                                label: const Text('Confirm Dangerous'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () =>
-                                    submitFeedback(caseId, 0),
-                                icon: const Icon(Icons.check_circle_outline,
-                                    size: 16),
-                                label: const Text('Mark as Safe'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                return Dismissible(
+                  key: ValueKey(docId),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 24),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    ),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.delete_outline, color: Colors.red, size: 26),
+                        SizedBox(height: 4),
+                        Text('Dismiss',
+                            style:
+                                TextStyle(color: Colors.red, fontSize: 11)),
                       ],
                     ),
-                  );
-                },
-              ),
-            );
-          }).toList()),
-      ],
+                  ),
+                  onDismissed: (_) {
+                    _firestoreService.acknowledgePendingReview(docId);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Case dismissed'),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  },
+                  child: AnimatedBuilder(
+                    animation: _pulseController,
+                    builder: (context, child) {
+                      final borderColor = Color.lerp(
+                        Colors.orange,
+                        Colors.orange.withValues(alpha: 0.3),
+                        _pulseController.value,
+                      )!;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor, width: 2),
+                          color: Colors.orange.withValues(alpha: 0.05),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Review Required — Uncertain Content Detected',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() {
+                                    if (isFavorited) {
+                                      _favoritedCaseIds.remove(docId);
+                                    } else {
+                                      _favoritedCaseIds.add(docId);
+                                    }
+                                  }),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 8),
+                                    child: Icon(
+                                      isFavorited
+                                          ? Icons.star
+                                          : Icons.star_outline,
+                                      color: isFavorited
+                                          ? Colors.amber
+                                          : AppTheme.of(context).textMuted,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              c['prompt'] as String? ?? '',
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Risk Score: $riskPercent',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 6),
+                            LinearProgressIndicator(
+                              value: riskScore,
+                              backgroundColor:
+                                  Colors.grey.withValues(alpha: 0.3),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                riskScore > 0.7
+                                    ? Colors.red
+                                    : riskScore > 0.4
+                                        ? Colors.orange
+                                        : Colors.green,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Submitted: $dateStr',
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _firestoreService
+                                        .acknowledgePendingReview(docId),
+                                    icon: const Icon(
+                                        Icons.dangerous_outlined,
+                                        size: 16),
+                                    label: const Text('Confirm Dangerous'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _firestoreService
+                                        .acknowledgePendingReview(docId),
+                                    icon: const Icon(
+                                        Icons.check_circle_outline,
+                                        size: 16),
+                                    label: const Text('Mark as Safe'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }),
+          ],
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final t = AppTheme.of(context);
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Container(
-        decoration: BoxDecoration(gradient: AppColors.bgGradient),
+        decoration: BoxDecoration(gradient: t.bgGradient),
         child: FutureBuilder<UserModel?>(
           future: _firestoreService.getUser(uid),
           builder: (context, parentSnap) {
@@ -416,7 +523,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildPendingSection(),
+                        _buildBlockedAlertsSection(uid),
+                        _buildPendingSection(uid),
                         const SizedBox(height: 24),
                         _buildWelcomeCard(parent),
                         const SizedBox(height: 20),
@@ -436,10 +544,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
   }
 
   Widget _buildHeader(UserModel? parent) {
+    final t = AppTheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 48, 20, 16),
       decoration: BoxDecoration(
-        gradient: AppColors.headerGradient,
+        gradient: t.headerGradient,
         border: Border(
           bottom: BorderSide(
               color: AppColors.parentAccent.withValues(alpha: 0.25), width: 1),
@@ -472,10 +581,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'AegisMind',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                   letterSpacing: 0.3,
@@ -483,7 +592,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
               ),
               Text(
                 'Parent Portal',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                style: TextStyle(color: t.textMuted, fontSize: 10),
               ),
             ],
           ),
@@ -509,29 +618,30 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
             ),
           ),
           const SizedBox(width: 4),
+          const ThemeToggleButton(),
           IconButton(
-            icon: Icon(Icons.refresh, color: AppColors.textMuted, size: 20),
+            icon: Icon(Icons.refresh, color: t.textMuted, size: 20),
             tooltip: 'Refresh pending reviews',
             onPressed: fetchPendingCases,
           ),
           IconButton(
-            icon: Icon(Icons.logout, color: AppColors.textMuted, size: 20),
+            icon: Icon(Icons.logout, color: t.textMuted, size: 20),
             tooltip: 'Sign out',
             onPressed: () async {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: AppColors.bgSurface,
-                  title: const Text('Sign out',
-                      style: TextStyle(color: Colors.white, fontSize: 15)),
+                  backgroundColor: AppTheme.of(context).bgSurface,
+                  title: Text('Sign out',
+                      style: TextStyle(color: t.textPrimary, fontSize: 15)),
                   content: Text('Are you sure you want to sign out?',
                       style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 13)),
+                          color: AppTheme.of(context).textSecondary, fontSize: 13)),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
                       child: Text('Cancel',
-                          style: TextStyle(color: AppColors.textMuted)),
+                          style: TextStyle(color: AppTheme.of(context).textMuted)),
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, true),
@@ -543,12 +653,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
               );
               if (confirm == true) {
                 await FirebaseAuth.instance.signOut();
-                if (mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const AuthGate()),
-                    (_) => false,
-                  );
-                }
               }
             },
           ),
@@ -641,8 +745,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: AppColors.bgSurface,
-          border: Border.all(color: AppColors.border.withOpacity(0.4)),
+          color: AppTheme.of(context).bgSurface,
+          border: Border.all(color: AppTheme.of(context).border.withOpacity(0.4)),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -677,14 +781,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                   Text(
                     'Access AegisMind\'s safe chat and analyzer',
                     style:
-                        TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        TextStyle(color: AppTheme.of(context).textMuted, fontSize: 12),
                   ),
                 ],
               ),
             ),
             Icon(
               Icons.arrow_forward_ios,
-              color: AppColors.textMuted,
+              color: AppTheme.of(context).textMuted,
               size: 14,
             ),
           ],
@@ -705,7 +809,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
             Text(
               'Child Accounts',
               style: TextStyle(
-                color: AppColors.textSecondary,
+                color: AppTheme.of(context).textSecondary,
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
@@ -728,9 +832,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                 padding: const EdgeInsets.symmetric(
                     vertical: 32, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: AppColors.bgSurface,
+                  color: AppTheme.of(context).bgSurface,
                   border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.4)),
+                      color: AppTheme.of(context).border.withValues(alpha: 0.4)),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -746,10 +850,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                           color: AppColors.childAccent, size: 28),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'No children linked yet',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppTheme.of(context).textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -759,7 +863,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                       'Ask your admin to create a child account\nlinked to your email.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          color: AppColors.textMuted, fontSize: 12),
+                          color: AppTheme.of(context).textMuted, fontSize: 12),
                     ),
                   ],
                 ),
@@ -776,10 +880,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                 final child = children[i];
                 return Container(
                   decoration: BoxDecoration(
-                    color: AppColors.bgSurface,
+                    color: AppTheme.of(context).bgSurface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                        color: AppColors.border.withValues(alpha: 0.3)),
+                        color: AppTheme.of(context).border.withValues(alpha: 0.3)),
                     boxShadow: AppColors.cardShadow,
                   ),
                   child: ClipRRect(
@@ -829,8 +933,8 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                                     children: [
                                       Text(
                                         child.name,
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: AppTheme.of(context).textPrimary,
                                           fontWeight: FontWeight.w600,
                                           fontSize: 14,
                                         ),
@@ -858,7 +962,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen>
                                   Text(
                                     child.email,
                                     style: TextStyle(
-                                        color: AppColors.textMuted,
+                                        color: AppTheme.of(context).textMuted,
                                         fontSize: 12),
                                   ),
                                 ],

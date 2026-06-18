@@ -23,7 +23,7 @@ class ChatMessage {
     this.verdict,
   });
 
-  ChatMessage copyWith({
+  ChatMessage copyWith({//safe update pattern when we want to update a message we can use copy with to create a new instance with updated fields
     String? content,
     bool? isLoading,
     String? pipelineId,

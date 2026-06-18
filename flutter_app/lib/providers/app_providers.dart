@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+
+// ─── 0. themeModeProvider ────────────────────────────────────────────────────
+final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.dark);
 
 // ─── 1. authProvider ────────────────────────────────────────────────────────
 
@@ -13,7 +17,7 @@ final authProvider = StreamProvider<User?>((ref) {
 
 // ─── 2. chatProvider ────────────────────────────────────────────────────────
 
-class ChatState {
+class ChatState {//a snapchot of the current chat state at any time
   final List<Map<String, dynamic>> messages;
   final String? currentPipelineId;
   final bool isLoading;
@@ -24,7 +28,7 @@ class ChatState {
     this.isLoading = false,
   });
 
-  ChatState copyWith({
+  ChatState copyWith({ //safe update pattern
     List<Map<String, dynamic>>? messages,
     String? currentPipelineId,
     bool clearPipelineId = false,
@@ -39,7 +43,7 @@ class ChatState {
   }
 }
 
-class ChatNotifier extends StateNotifier<ChatState> {
+class ChatNotifier extends StateNotifier<ChatState> {//chat notifier is controller add a message , set loadin set pipeline id
   ChatNotifier() : super(const ChatState());
 
   void addMessage(Map<String, dynamic> message) {

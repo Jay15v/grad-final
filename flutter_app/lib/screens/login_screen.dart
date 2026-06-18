@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_colors.dart';
 import '../widgets/auth_widgets.dart';
 import 'signup_screen.dart';
 
@@ -117,8 +118,9 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: kAuthBg,
+      backgroundColor: t.authBg,
       body: FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
@@ -147,6 +149,7 @@ class _LoginScreenState extends State<LoginScreen>
   // ─── Nav bar ─────────────────────────────────────────────────────────────
 
   Widget _buildNavBar() {
+    final t = AppTheme.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -158,16 +161,16 @@ class _LoginScreenState extends State<LoginScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Text(
                     'AegisMind',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: t.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
-                  Text(
+                  const Text(
                     'Where Defense Meets Reasoning',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -177,10 +180,10 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
             const Spacer(),
-            const Text(
+            Text(
               'Login',
               style: TextStyle(
-                color: Colors.white,
+                color: t.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -210,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
             const SizedBox(width: 10),
-            const Icon(Icons.person_outline, color: Colors.white54, size: 22),
+            Icon(Icons.person_outline, color: t.textMuted, size: 22),
           ],
         ),
       ),
@@ -220,12 +223,13 @@ class _LoginScreenState extends State<LoginScreen>
   // ─── Glassmorphism card ──────────────────────────────────────────────────
 
   Widget _buildCard() {
+    final t = AppTheme.of(context);
     return Container(
       padding: const EdgeInsets.all(36),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: t.authCard,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: t.authCardBorder),
         boxShadow: const [
           BoxShadow(
             color: Color(0x4D000000),
@@ -239,14 +243,13 @@ class _LoginScreenState extends State<LoginScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Wordmark block
             const Center(child: ShieldLogo(size: 64, iconSize: 32, radius: 18)),
             const SizedBox(height: 18),
-            const Center(
+            Center(
               child: Text(
                 'AegisMind',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
@@ -261,21 +264,21 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
             const SizedBox(height: 8),
-            const Center(
+            Center(
               child: Text(
                 'Welcome Back',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             const SizedBox(height: 4),
-            const Center(
+            Center(
               child: Text(
                 'Login to access AegisMind',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(color: t.textMuted, fontSize: 13),
               ),
             ),
             const SizedBox(height: 28),
@@ -307,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen>
                   _obscure
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: Colors.white30,
+                  color: t.textMuted,
                   size: 18,
                 ),
                 onPressed: () => setState(() => _obscure = !_obscure),
@@ -352,9 +355,9 @@ class _LoginScreenState extends State<LoginScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
+                Text(
                   "Don't have an account? ",
-                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                  style: TextStyle(color: t.textMuted, fontSize: 13),
                 ),
                 GestureDetector(
                   onTap: _goToSignup,

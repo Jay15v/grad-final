@@ -1,5 +1,157 @@
 import 'package:flutter/material.dart';
 
+// ─── App Theme Extension (light / dark structural colors) ─────────────────────
+//
+// Use AppTheme.of(context).bg etc. for background / text / border colors that
+// differ between light and dark mode.  Keep AppColors.xxx for semantic /
+// brand colors that stay the same in both modes.
+
+class AppTheme extends ThemeExtension<AppTheme> {
+  final Color bg;
+  final Color bgSurface;
+  final Color surface;
+  final Color border;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final LinearGradient bgGradient;
+  final LinearGradient headerGradient;
+  final List<BoxShadow> cardShadow;
+  // Auth-screen specifics
+  final Color authBg;
+  final Color authCard;
+  final Color authCardBorder;
+  final Color authField;
+  final Color authBorder;
+
+  const AppTheme({
+    required this.bg,
+    required this.bgSurface,
+    required this.surface,
+    required this.border,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.bgGradient,
+    required this.headerGradient,
+    required this.cardShadow,
+    required this.authBg,
+    required this.authCard,
+    required this.authCardBorder,
+    required this.authField,
+    required this.authBorder,
+  });
+
+  static AppTheme of(BuildContext context) =>
+      Theme.of(context).extension<AppTheme>()!;
+
+  // ── Dark palette ────────────────────────────────────────────────────────────
+  static final dark = AppTheme(
+    bg:          const Color(0xFF0A1628),
+    bgSurface:   const Color(0xFF0F1F3D),
+    surface:     const Color(0xFF162038),
+    border:      const Color(0xFF1E3A5F),
+    textPrimary:   Colors.white,
+    textSecondary: const Color(0xFFCBD5E1),
+    textMuted:     const Color(0xFF8B949E),
+    bgGradient: const LinearGradient(
+      colors: [Color(0xFF0A1628), Color(0xFF0F1F3D), Color(0xFF0A1628)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    headerGradient: const LinearGradient(
+      colors: [Color(0xFF0A1628), Color(0xFF0F2448), Color(0xFF0A1628)],
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+    ),
+    cardShadow: const [
+      BoxShadow(color: Color(0x73000000), blurRadius: 12, offset: Offset(0, 4)),
+    ],
+    authBg:          const Color(0xFF0A1628),
+    authCard:        const Color(0x0DFFFFFF), // white 5 %
+    authCardBorder:  const Color(0x1EFFFFFF), // white 12 %
+    authField:       const Color(0xFF0E2040),
+    authBorder:      const Color(0xFF1E3A5F),
+  );
+
+  // ── Light palette ───────────────────────────────────────────────────────────
+  static final light = AppTheme(
+    bg:          const Color(0xFFF8FAFC),
+    bgSurface:   const Color(0xFFEFF3F8),
+    surface:     const Color(0xFFE4EDF6),
+    border:      const Color(0xFFBFD3E8),
+    textPrimary:   const Color(0xFF0F172A),
+    textSecondary: const Color(0xFF334155),
+    textMuted:     const Color(0xFF64748B),
+    bgGradient: const LinearGradient(
+      colors: [Color(0xFFF8FAFC), Color(0xFFEFF3F8), Color(0xFFF8FAFC)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    headerGradient: const LinearGradient(
+      colors: [Color(0xFFF0F4F8), Color(0xFFE8F0FA), Color(0xFFF0F4F8)],
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+    ),
+    cardShadow: const [
+      BoxShadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 2)),
+    ],
+    authBg:          const Color(0xFFF0F4F8),
+    authCard:        const Color(0xFFFFFFFF),
+    authCardBorder:  const Color(0xFFE2ECF5),
+    authField:       const Color(0xFFF8FAFC),
+    authBorder:      const Color(0xFFCBD5E1),
+  );
+
+  @override
+  AppTheme copyWith({
+    Color? bg, Color? bgSurface, Color? surface, Color? border,
+    Color? textPrimary, Color? textSecondary, Color? textMuted,
+    LinearGradient? bgGradient, LinearGradient? headerGradient,
+    List<BoxShadow>? cardShadow,
+    Color? authBg, Color? authCard, Color? authCardBorder,
+    Color? authField, Color? authBorder,
+  }) => AppTheme(
+    bg: bg ?? this.bg,
+    bgSurface: bgSurface ?? this.bgSurface,
+    surface: surface ?? this.surface,
+    border: border ?? this.border,
+    textPrimary: textPrimary ?? this.textPrimary,
+    textSecondary: textSecondary ?? this.textSecondary,
+    textMuted: textMuted ?? this.textMuted,
+    bgGradient: bgGradient ?? this.bgGradient,
+    headerGradient: headerGradient ?? this.headerGradient,
+    cardShadow: cardShadow ?? this.cardShadow,
+    authBg: authBg ?? this.authBg,
+    authCard: authCard ?? this.authCard,
+    authCardBorder: authCardBorder ?? this.authCardBorder,
+    authField: authField ?? this.authField,
+    authBorder: authBorder ?? this.authBorder,
+  );
+
+  @override
+  AppTheme lerp(ThemeExtension<AppTheme>? other, double t) {
+    if (other is! AppTheme) return this;
+    return AppTheme(
+      bg:           Color.lerp(bg, other.bg, t)!,
+      bgSurface:    Color.lerp(bgSurface, other.bgSurface, t)!,
+      surface:      Color.lerp(surface, other.surface, t)!,
+      border:       Color.lerp(border, other.border, t)!,
+      textPrimary:  Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary:Color.lerp(textSecondary, other.textSecondary, t)!,
+      textMuted:    Color.lerp(textMuted, other.textMuted, t)!,
+      bgGradient:      t < 0.5 ? bgGradient : other.bgGradient,
+      headerGradient:  t < 0.5 ? headerGradient : other.headerGradient,
+      cardShadow:      t < 0.5 ? cardShadow : other.cardShadow,
+      authBg:          Color.lerp(authBg, other.authBg, t)!,
+      authCard:        Color.lerp(authCard, other.authCard, t)!,
+      authCardBorder:  Color.lerp(authCardBorder, other.authCardBorder, t)!,
+      authField:       Color.lerp(authField, other.authField, t)!,
+      authBorder:      Color.lerp(authBorder, other.authBorder, t)!,
+    );
+  }
+}
+
 class AppColors {
   // ── Base palette ────────────────────────────────────────────────────────────
   static const Color bg        = Color(0xFF0A1628); // dark navy

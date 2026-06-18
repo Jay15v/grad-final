@@ -47,4 +47,54 @@ class FirestoreService {
 
   Future<void> deleteUserRecord(String uid) =>
       _users.doc(uid).delete();
+
+  /// Real-time stream of unacknowledged blocked-message alerts for a parent.
+  Stream<List<Map<String, dynamic>>> getBlockedAlerts(String parentId) =>
+      FirebaseFirestore.instance
+          .collection('blocked_alerts')
+          .where('parent_id', isEqualTo: parentId)
+          .snapshots()
+          .map((snap) {
+            final list = snap.docs
+                .where((d) => d.data()['acknowledged'] != true)
+                .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+                .toList();
+            list.sort((a, b) {
+              final ta = (a['timestamp'] as num?) ?? 0;
+              final tb = (b['timestamp'] as num?) ?? 0;
+              return tb.compareTo(ta);
+            });
+            return list;
+          });
+
+  Future<void> acknowledgeBlockedAlert(String docId) =>
+      FirebaseFirestore.instance
+          .collection('blocked_alerts')
+          .doc(docId)
+          .update({'acknowledged': true});
+
+  /// Real-time stream of unacknowledged HESITATE cases for a parent.
+  Stream<List<Map<String, dynamic>>> getPendingReviews(String parentId) =>
+      FirebaseFirestore.instance
+          .collection('pending_reviews')
+          .where('parent_id', isEqualTo: parentId)
+          .snapshots()
+          .map((snap) {
+            final list = snap.docs
+                .where((d) => d.data()['acknowledged'] != true)
+                .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+                .toList();
+            list.sort((a, b) {
+              final ta = (a['timestamp'] as num?) ?? 0;
+              final tb = (b['timestamp'] as num?) ?? 0;
+              return tb.compareTo(ta);
+            });
+            return list;
+          });
+
+  Future<void> acknowledgePendingReview(String docId) =>
+      FirebaseFirestore.instance
+          .collection('pending_reviews')
+          .doc(docId)
+          .update({'acknowledged': true});
 }

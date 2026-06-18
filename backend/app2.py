@@ -288,13 +288,43 @@ def chat():
     case_id = None
     rlhf_pending = False
     try:
-        # DEBUG: Log auth info
         logging.info(f"[CHAT] uid={uid}, role={role}, parent_id={parent_id}, decision={decision}, risk={risk_score}")
         case_id = log_case(message, decision, risk_score, child_id, parent_id)
         rlhf_pending = decision == 'HESITATE'
         logging.info(f"[CHAT] rlhf_pending={rlhf_pending} (decision={decision}, parent_id={parent_id})")
     except Exception as e:
         logging.warning(f"log_case failed in chat: {e}")
+
+    # Write to Firestore so alerts/reviews survive Railway redeploys
+    try:
+        if _firebase_available and firebase_admin._apps:
+            import time as _time
+            from firebase_admin import firestore as _fs
+            db = _fs.client()
+            effective_parent = parent_id or uid
+            if decision == "BLOCK" and effective_parent:
+                db.collection("blocked_alerts").add({
+                    "parent_id": effective_parent,
+                    "child_id": child_id,
+                    "prompt": message,
+                    "risk_score": risk_score,
+                    "semantic_category": defense.get("semantic_domain") or "",
+                    "timestamp": _time.time(),
+                    "acknowledged": False,
+                })
+            elif decision == "HESITATE" and effective_parent:
+                db.collection("pending_reviews").add({
+                    "parent_id": effective_parent,
+                    "child_id": child_id,
+                    "prompt": message,
+                    "risk_score": risk_score,
+                    "semantic_domain": defense.get("semantic_domain") or "",
+                    "timestamp": _time.time(),
+                    "acknowledged": False,
+                    "case_id": case_id,
+                })
+    except Exception as e:
+        logging.warning(f"Firestore write failed: {e}")
 
     print("===DECISION CHECK===", decision, flush=True)
     if decision == "BLOCK":

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'app_colors.dart';
 
 // ─── Auth Design Tokens ───────────────────────────────────────────────────────
+// Brand / role colors — same in both modes.
+const kAuthCyan   = Color(0xFF2196F3); // primary blue
+const kAuthBlue   = Color(0xFF1565C0); // darker blue
+const kAuthBorder = Color(0xFF1E3A5F); // kept for const gradient usage
+const kAuthPurple = Color(0xFF7B1FA2);
+const kAuthTeal   = Color(0xFF00897B);
+// Structural constants below are legacy — new code uses AppTheme.of(context).
 const kAuthBg     = Color(0xFF0A1628);
 const kAuthCard   = Color(0xFF0F1F3D);
 const kAuthField  = Color(0xFF0E2040);
-const kAuthCyan   = Color(0xFF2196F3); // primary blue
-const kAuthBlue   = Color(0xFF1565C0); // darker blue
-const kAuthBorder = Color(0xFF1E3A5F);
-const kAuthPurple = Color(0xFF7B1FA2);
-const kAuthTeal   = Color(0xFF00897B);
 
 // ─── Shield Logo (Custom Painter) ────────────────────────────────────────────
 
@@ -222,13 +225,14 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
+          style: TextStyle(
+            color: t.textSecondary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
@@ -238,21 +242,21 @@ class AuthTextField extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           obscureText: obscureText,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: TextStyle(color: t.textPrimary, fontSize: 14),
           decoration: InputDecoration(
-            prefixIcon: Icon(prefixIcon, color: Colors.white30, size: 18),
+            prefixIcon: Icon(prefixIcon, color: t.textMuted, size: 18),
             hintText: hintText,
-            hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
+            hintStyle: TextStyle(color: t.textMuted.withValues(alpha: 0.6), fontSize: 14),
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: kAuthField,
+            fillColor: t.authField,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: kAuthBorder),
+              borderSide: BorderSide(color: t.authBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: kAuthBorder),
+              borderSide: BorderSide(color: t.authBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -264,8 +268,7 @@ class AuthTextField extends StatelessWidget {
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide:
-                  const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+              borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,

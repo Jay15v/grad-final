@@ -1,3 +1,56 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// ADMIN DASHBOARD — FUNCTION INDEX
+// ═══════════════════════════════════════════════════════════════════════════
+// AdminDashboard (StatefulWidget)
+//   initState()            — initializes the 5-tab TabController
+//   dispose()              — cleans up the TabController
+//   build()                — root scaffold with header, stats row, tabs, tab views
+//   _signOut()             — signs the admin out via AuthService
+//   _buildHeader()         — top bar: shield logo, title, sign-out button
+//   _buildStatsRow()       — 4 stat cards (total users, flags, parents, children)
+//   _buildTabBar()         — horizontal tab navigation bar
+//
+// _UsersTab (StatelessWidget) — "Users" tab: live list of all users
+//   _roleColor()           — maps role string to display color
+//   _roleIcon()            — maps role string to icon
+//   build()                — StreamBuilder over users collection
+//
+// _CreateAccountTab (StatefulWidget) — "Create Account" tab
+//   initState()            — triggers _loadParents()
+//   dispose()              — disposes text-field controllers
+//   _loadParents()         — fetches parent users from Firestore for dropdown
+//   _friendlyError()       — converts Firebase error codes to readable messages
+//   build()                — form with role selector, fields, and submit button
+//   _buildParentDropdown() — dropdown for selecting a parent (child accounts only)
+//   _banner()              — success/error banner widget
+//   _field()               — reusable styled text-field builder
+//
+// _AlertsTab (StatelessWidget) — "Alerts" tab: unresolved admin flags
+//   _flagColor()           — maps flag type to color
+//   _flagLabel()           — maps flag type to display label
+//   _timeAgo()             — formats epoch ms timestamp to "X min/hr/day ago"
+//   build()                — StreamBuilder over admin_flags collection
+//
+// _AlertCard (StatefulWidget) — single expandable flag card in Alerts tab
+//   build()                — card with expand/collapse, meta chips, action buttons
+//   _metaChip()            — small labeled chip (session id, model, etc.)
+//   _actionButton()        — resolve / dismiss action button
+//
+// _AnalyticsTab (StatefulWidget) — "Analytics" tab: flag stats and threshold control
+//   initState()            — starts Firestore listener for admin_flags
+//   build()                — summary cards, bar chart, threshold slider
+//   _sectionLabel()        — styled section heading text
+//   _buildSummaryCards()   — row of total/unresolved/resolved summary cards
+//   _summaryCard()         — individual summary card widget
+//   _buildBarChart()       — horizontal bar chart of flags by type
+//   _buildThresholdControl() — slider to adjust consensus threshold setting
+//
+// _StatCard (StatelessWidget) — reusable stat card used in _buildStatsRow()
+//   build()                — icon + count + label card
+//
+// _BarItem — data class holding label, count, color for one bar in the chart
+// ═══════════════════════════════════════════════════════════════════════════
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +59,7 @@ import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/app_colors.dart';
 import '../widgets/auth_widgets.dart';
+import '../main.dart' show ThemeToggleButton;
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -15,19 +69,19 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin { //for animated tools
   late final TabController _tabs;
-  final _authService = AuthService();
-  final _firestoreService = FirestoreService();
+  final _authService = AuthService();//login and out anD CREATE users
+  final _firestoreService = FirestoreService();//fetch
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);//5 tabs in admin dashboard
   }
 
   @override
-  void dispose() {
+  void dispose() {//destroy
     _tabs.dispose();
     super.dispose();
   }
@@ -38,10 +92,11 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Container(
-        decoration: BoxDecoration(gradient: AppColors.bgGradient),
+        decoration: BoxDecoration(gradient: t.bgGradient),
         child: Column(
           children: [
             _buildHeader(),
@@ -76,10 +131,11 @@ class _AdminDashboardState extends State<AdminDashboard>
   }
 
   Widget _buildHeader() {
+    final t = AppTheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 48, 20, 16),
       decoration: BoxDecoration(
-        gradient: AppColors.headerGradient,
+        gradient: t.headerGradient,
         border: Border(
           bottom: BorderSide(
               color: AppColors.adminAccent.withValues(alpha: 0.25), width: 1),
@@ -113,10 +169,10 @@ class _AdminDashboardState extends State<AdminDashboard>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'AegisMind Admin',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                   letterSpacing: 0.3,
@@ -124,10 +180,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
               Text(
                 'Where Defense Meets Reasoning',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 10,
-                ),
+                style: TextStyle(color: t.textMuted, fontSize: 10),
               ),
             ],
           ),
@@ -152,8 +205,10 @@ class _AdminDashboardState extends State<AdminDashboard>
             ),
           ),
           const SizedBox(width: 8),
+          const ThemeToggleButton(),
+          const SizedBox(width: 4),
           IconButton(
-            icon: Icon(Icons.logout, color: AppColors.textMuted, size: 20),
+            icon: Icon(Icons.logout, color: t.textMuted, size: 20),
             tooltip: 'Sign out',
             onPressed: _signOut,
           ),
@@ -162,19 +217,19 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow() {//the 4 cards at the top of the admin dashboard
     return Container(
-      color: AppColors.bgSurface.withValues(alpha: 0.6),
+      color: AppTheme.of(context).bgSurface.withValues(alpha: 0.6),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       // Nest StreamBuilders so all 4 cards live in one Row with bounded widths
-      child: StreamBuilder<List<UserModel>>(
+      child: StreamBuilder<List<UserModel>>(//listen from fire store
         stream: _firestoreService.getAllUsers(),
         builder: (context, userSnap) {
           final users    = userSnap.data ?? [];
           final parents  = users.where((u) => u.role == 'parent').length;
           final children = users.where((u) => u.role == 'child').length;
 
-          return StreamBuilder<QuerySnapshot>(
+          return StreamBuilder<QuerySnapshot>(//adminflags unresolved
             stream: FirebaseFirestore.instance
                 .collection('admin_flags')
                 .where('resolved', isEqualTo: false)
@@ -228,19 +283,19 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildTabBar() {//navigation tabs
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
+        color: AppTheme.of(context).bgSurface,
         border: Border(
           bottom: BorderSide(
-              color: AppColors.border.withValues(alpha: 0.5), width: 1),
+              color: AppTheme.of(context).border.withValues(alpha: 0.5), width: 1),
         ),
       ),
       child: TabBar(
         controller: _tabs,
         labelColor: AppColors.accent,
-        unselectedLabelColor: AppColors.textMuted,
+        unselectedLabelColor: AppTheme.of(context).textMuted,
         indicatorColor: AppColors.accent,
         indicatorWeight: 2,
         indicatorSize: TabBarIndicatorSize.tab,
@@ -315,7 +370,7 @@ class _UsersTab extends StatelessWidget {
           return Center(
             child: Text(
               'No users yet',
-              style: TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppTheme.of(context).textMuted),
             ),
           );
         }
@@ -329,8 +384,8 @@ class _UsersTab extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: AppColors.bgSurface,
-                border: Border.all(color: AppColors.border.withOpacity(0.4)),
+                color: AppTheme.of(context).bgSurface,
+                border: Border.all(color: AppTheme.of(context).border.withOpacity(0.4)),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -361,7 +416,7 @@ class _UsersTab extends StatelessWidget {
                         Text(
                           user.email,
                           style: TextStyle(
-                            color: AppColors.textMuted,
+                            color: AppTheme.of(context).textMuted,
                             fontSize: 12,
                           ),
                         ),
@@ -371,7 +426,7 @@ class _UsersTab extends StatelessWidget {
                             child: Text(
                               'Parent ID: ${user.parentId}',
                               style: TextStyle(
-                                color: AppColors.textMuted,
+                                color: AppTheme.of(context).textMuted,
                                 fontSize: 11,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -533,8 +588,8 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppColors.bgSurface,
-              border: Border.all(color: AppColors.border.withOpacity(0.4)),
+              color: AppTheme.of(context).bgSurface,
+              border: Border.all(color: AppTheme.of(context).border.withOpacity(0.4)),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Form(
@@ -556,7 +611,7 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
                         ? 'Child accounts are linked to a parent and go directly to the chat.'
                         : 'Parent accounts can have child accounts linked to them.',
                     style:
-                        TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        TextStyle(color: AppTheme.of(context).textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 20),
                   _field('Full Name', _nameCtrl, validator: (v) =>
@@ -580,7 +635,7 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
                     suffix: IconButton(
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textMuted,
+                        color: AppTheme.of(context).textMuted,
                         size: 18,
                       ),
                       onPressed: () => setState(() => _obscure = !_obscure),
@@ -638,14 +693,14 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
     );
   }
 
-  Widget _buildParentDropdown() {
+  Widget _buildParentDropdown() {//only for child accounts
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Link to Parent',
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: AppTheme.of(context).textSecondary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
@@ -678,12 +733,12 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                            color: AppColors.border.withOpacity(0.4)),
+                            color: AppTheme.of(context).border.withOpacity(0.4)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                            color: AppColors.border.withOpacity(0.4)),
+                            color: AppTheme.of(context).border.withOpacity(0.4)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -695,7 +750,7 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
                     ),
                     hint: Text(
                       'Select parent',
-                      style: TextStyle(color: AppColors.textMuted),
+                      style: TextStyle(color: AppTheme.of(context).textMuted),
                     ),
                     items: _parents
                         .map(
@@ -740,7 +795,7 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
         Text(
           label,
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: AppTheme.of(context).textSecondary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
@@ -758,12 +813,12 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide:
-                  BorderSide(color: AppColors.border.withOpacity(0.4)),
+                  BorderSide(color: AppTheme.of(context).border.withOpacity(0.4)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide:
-                  BorderSide(color: AppColors.border.withOpacity(0.4)),
+                  BorderSide(color: AppTheme.of(context).border.withOpacity(0.4)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -791,7 +846,7 @@ class _CreateAccountTabState extends State<_CreateAccountTab> {
 
 // ─── Alerts Tab ───────────────────────────────────────────────────────────────
 
-class _AlertsTab extends StatelessWidget {
+class _AlertsTab extends StatelessWidget {//shows unresolved flags
   const _AlertsTab();
 
   Color _flagColor(String? type) {
@@ -840,7 +895,7 @@ class _AlertsTab extends StatelessWidget {
     }
   }
 
-  Future<void> _flagForRag(BuildContext ctx, String docId) async {
+  Future<void> _flagForRag(BuildContext ctx, String docId) async {//flag for RAG tuning
     await FirebaseFirestore.instance
         .collection('admin_flags')
         .doc(docId)
@@ -912,7 +967,7 @@ class _AlertsTab extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text('All flags have been addressed.',
                     style:
-                        TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                        TextStyle(color: AppTheme.of(context).textMuted, fontSize: 13)),
               ],
             ),
           );
@@ -979,7 +1034,7 @@ class _AlertCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
+        color: AppTheme.of(context).bgSurface,
         border: Border.all(color: flagColor.withValues(alpha: 0.25)),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -1022,7 +1077,7 @@ class _AlertCard extends StatelessWidget {
                 ),
               ],
               const Spacer(),
-              Text(timeAgo, style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              Text(timeAgo, style: TextStyle(color: AppTheme.of(context).textMuted, fontSize: 11)),
             ],
           ),
 
@@ -1031,14 +1086,14 @@ class _AlertCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               '"$promptSnippet"',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
+              style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
 
           // ── Meta chips ────────────────────────────────────────────────
-          if (verdict != null || ragHitRate != null) ...[
+          if (verdict != null || ragHitRate != null) ...[//show verdict and RAG hit rate if available
             const SizedBox(height: 10),
             Row(
               children: [
@@ -1080,7 +1135,7 @@ class _AlertCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       explanation,
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                      style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 12, height: 1.4),
                     ),
                   ),
                 ],
@@ -1114,7 +1169,7 @@ class _AlertCard extends StatelessWidget {
                         const SizedBox(height: 3),
                         Text(
                           suggestion,
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                          style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 12, height: 1.4),
                         ),
                         if (suggestedThreshold != null) ...[
                           const SizedBox(height: 6),
@@ -1430,9 +1485,9 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
+        color: AppTheme.of(context).bgSurface,
         border: Border.all(
-            color: AppColors.border.withValues(alpha: 0.4)),
+            color: AppTheme.of(context).border.withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1460,7 +1515,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                     )),
                 Text(label,
                     style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 10)),
+                        color: AppTheme.of(context).textMuted, fontSize: 10)),
               ],
             ),
           ),
@@ -1487,9 +1542,9 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
+        color: AppTheme.of(context).bgSurface,
         border: Border.all(
-            color: AppColors.border.withValues(alpha: 0.4)),
+            color: AppTheme.of(context).border.withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: _totalFlags == 0
@@ -1498,7 +1553,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text('No flag data yet.',
                     style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 13)),
+                        color: AppTheme.of(context).textMuted, fontSize: 13)),
               ),
             )
           : SizedBox(
@@ -1528,7 +1583,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                             decoration: BoxDecoration(
                               color: item.count > 0
                                   ? item.color.withValues(alpha: 0.75)
-                                  : AppColors.border
+                                  : AppTheme.of(context).border
                                       .withValues(alpha: 0.3),
                               borderRadius:
                                   const BorderRadius.vertical(
@@ -1539,7 +1594,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                           Text(item.label,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  color: AppColors.textMuted,
+                                  color: AppTheme.of(context).textMuted,
                                   fontSize: 9,
                                   height: 1.3)),
                         ],
@@ -1558,9 +1613,9 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
+        color: AppTheme.of(context).bgSurface,
         border: Border.all(
-            color: AppColors.border.withValues(alpha: 0.4)),
+            color: AppTheme.of(context).border.withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1603,13 +1658,13 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
             '(reduces FALSE_CONSENSUS flags). Lower it if models '
             'disagree too often despite similar responses. Default: 0.60.',
             style:
-                TextStyle(color: AppColors.textMuted, fontSize: 12),
+                TextStyle(color: AppTheme.of(context).textMuted, fontSize: 12),
           ),
           const SizedBox(height: 12),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor:   AppColors.accent,
-              inactiveTrackColor: AppColors.border,
+              inactiveTrackColor: AppTheme.of(context).border,
               thumbColor:         AppColors.accent,
               overlayColor:
                   AppColors.accent.withValues(alpha: 0.12),
@@ -1632,10 +1687,10 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
               children: [
                 Text('0.50  Lenient',
                     style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 10)),
+                        color: AppTheme.of(context).textMuted, fontSize: 10)),
                 Text('0.95  Strict',
                     style: TextStyle(
-                        color: AppColors.textMuted, fontSize: 10)),
+                        color: AppTheme.of(context).textMuted, fontSize: 10)),
               ],
             ),
           ),
@@ -1723,7 +1778,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             label,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+            style: TextStyle(color: AppTheme.of(context).textMuted, fontSize: 9),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),

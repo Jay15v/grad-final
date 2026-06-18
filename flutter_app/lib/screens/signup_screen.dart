@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
+import '../widgets/app_colors.dart';
 import '../widgets/auth_widgets.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -19,9 +20,12 @@ class _SignupScreenState extends State<SignupScreen>
   final _emailCtrl       = TextEditingController();
   final _passwordCtrl    = TextEditingController();
   final _confirmCtrl     = TextEditingController();
-  final _parentEmailCtrl = TextEditingController();
-  final _authService     = AuthService();
+  final _parentEmailCtrl  = TextEditingController();
+  final _nationalIdCtrl   = TextEditingController();
+  final _authService      = AuthService();
   final _firestoreService = FirestoreService();
+
+  int? _idAge;
 
   late final AnimationController _animCtrl;
   late final Animation<double>   _fadeAnim;
@@ -59,6 +63,7 @@ class _SignupScreenState extends State<SignupScreen>
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     _parentEmailCtrl.dispose();
+    _nationalIdCtrl.dispose();
     super.dispose();
   }
 
@@ -124,6 +129,25 @@ class _SignupScreenState extends State<SignupScreen>
     }
   }
 
+  DateTime? _extractBirthDate(String id) {
+    if (id.length != 14 || !RegExp(r'^\d{14}$').hasMatch(id)) return null;
+    final century = id[0] == '2' ? 1900 : id[0] == '3' ? 2000 : null;
+    if (century == null) return null;
+    final year  = century + int.parse(id.substring(1, 3));
+    final month = int.parse(id.substring(3, 5));
+    final day   = int.parse(id.substring(5, 7));
+    try { return DateTime(year, month, day); } catch (_) { return null; }
+  }
+
+  int? _calculateAge(String id) {
+    final b = _extractBirthDate(id);
+    if (b == null) return null;
+    final t = DateTime.now();
+    int age = t.year - b.year;
+    if (t.month < b.month || (t.month == b.month && t.day < b.day)) age--;
+    return age;
+  }
+
   String _friendlyError(String code) {
     switch (code) {
       case 'email-already-in-use':
@@ -141,8 +165,9 @@ class _SignupScreenState extends State<SignupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: kAuthBg,
+      backgroundColor: t.authBg,
       body: FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
@@ -171,6 +196,7 @@ class _SignupScreenState extends State<SignupScreen>
   // ─── Nav bar ─────────────────────────────────────────────────────────────
 
   Widget _buildNavBar() {
+    final t = AppTheme.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -178,19 +204,19 @@ class _SignupScreenState extends State<SignupScreen>
           children: [
             const ShieldLogo(),
             const SizedBox(width: 10),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'AegisMind',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: t.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
-                Text(
+                const Text(
                   'Where Defense Meets Reasoning',
                   style: TextStyle(color: kAuthCyan, fontSize: 9),
                 ),
@@ -199,10 +225,10 @@ class _SignupScreenState extends State<SignupScreen>
             const Spacer(),
             GestureDetector(
               onTap: _goToLogin,
-              child: const Text(
+              child: Text(
                 'Login',
                 style: TextStyle(
-                  color: Colors.white54,
+                  color: t.textMuted,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -239,12 +265,13 @@ class _SignupScreenState extends State<SignupScreen>
   // ─── Glassmorphism card ──────────────────────────────────────────────────
 
   Widget _buildCard() {
+    final t = AppTheme.of(context);
     return Container(
       padding: const EdgeInsets.all(36),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: t.authCard,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: t.authCardBorder),
         boxShadow: const [
           BoxShadow(
             color: Color(0x4D000000),
@@ -258,14 +285,13 @@ class _SignupScreenState extends State<SignupScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Wordmark block
             const Center(child: ShieldLogo(size: 64, iconSize: 32, radius: 18)),
             const SizedBox(height: 18),
-            const Center(
+            Center(
               child: Text(
                 'AegisMind',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
@@ -280,30 +306,30 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ),
             const SizedBox(height: 8),
-            const Center(
+            Center(
               child: Text(
                 'Create Account',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: t.textPrimary,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             const SizedBox(height: 4),
-            const Center(
+            Center(
               child: Text(
                 "Join AegisMind's Defense System",
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+                style: TextStyle(color: t.textMuted, fontSize: 13),
               ),
             ),
             const SizedBox(height: 24),
 
             // ── Account Type Selector ────────────────────────────────────
-            const Text(
+            Text(
               'Account Type',
               style: TextStyle(
-                color: Colors.white70,
+                color: t.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -374,6 +400,81 @@ class _SignupScreenState extends State<SignupScreen>
                   return null;
                 },
               ),
+              const SizedBox(height: 14),
+              // ── National ID field (child only) ────────────────────────
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'الرقم القومي',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _nationalIdCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 14,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: InputDecoration(
+                      counterText: '',
+                      prefixIcon: const Icon(Icons.badge_outlined,
+                          color: Colors.white30, size: 18),
+                      hintText: '12345678901234',
+                      hintStyle: const TextStyle(
+                          color: Colors.white24, fontSize: 14),
+                      suffixIcon: _idAge != null && _idAge! < 18
+                          ? const Icon(Icons.check_circle_outline,
+                              color: Color(0xFF22C55E), size: 18)
+                          : null,
+                      filled: true,
+                      fillColor: kAuthField,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: kAuthBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: kAuthBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide:
+                            const BorderSide(color: kAuthCyan, width: 1.5),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFEF4444)),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFEF4444), width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                    ),
+                    onChanged: (v) {
+                      setState(() =>
+                          _idAge = v.length == 14 ? _calculateAge(v) : null);
+                    },
+                    validator: (v) {
+                      if (_accountType != 'child') return null;
+                      if (v == null || v.isEmpty) return 'الرقم القومي مطلوب';
+                      final age = _calculateAge(v);
+                      if (age == null) return 'الرقم القومي غير صحيح';
+                      if (age >= 18) {
+                        return 'يجب أن يكون عمر الطفل أقل من 18 سنة';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
             ],
             const SizedBox(height: 14),
             AuthTextField(
@@ -387,7 +488,7 @@ class _SignupScreenState extends State<SignupScreen>
                   _obscurePass
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: Colors.white30,
+                  color: t.textMuted,
                   size: 18,
                 ),
                 onPressed: () => setState(() => _obscurePass = !_obscurePass),
@@ -410,7 +511,7 @@ class _SignupScreenState extends State<SignupScreen>
                   _obscureConfirm
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: Colors.white30,
+                  color: t.textMuted,
                   size: 18,
                 ),
                 onPressed: () =>

@@ -6,21 +6,20 @@ import '../models/pipeline_state.dart';
 import '../config/api_config.dart';
 
 class ChatResponse {
-  final String decision;
+  final String? decision;
   final String? reply;
-  final DefenseMeta defenseMeta;
+  final DefenseMeta? defenseMeta;
   final String? pipelineId;
   final bool rlhfPending;
   final String? verdict;
   final String? displayLabel;
   final double? avgAgreement;
-  // Map of model name → "ok" | "error"
   final Map<String, String>? modelStatuses;
 
   ChatResponse({
-    required this.decision,
+    this.decision,
     required this.reply,
-    required this.defenseMeta,
+    this.defenseMeta,
     required this.pipelineId,
     this.rlhfPending = false,
     this.verdict,
@@ -35,11 +34,13 @@ class ChatResponse {
       statuses = (json['model_statuses'] as Map)
           .map((k, v) => MapEntry(k.toString(), v.toString()));
     }
+    final rawMeta = json['defense_meta'];
     return ChatResponse(
-      decision: json['decision'] as String? ?? 'ALLOW',
+      decision: json['decision'] as String?,
       reply: json['reply'] as String?,
-      defenseMeta: DefenseMeta.fromJson(
-          json['defense_meta'] as Map<String, dynamic>? ?? {}),
+      defenseMeta: rawMeta is Map<String, dynamic>
+          ? DefenseMeta.fromJson(rawMeta)
+          : null,
       pipelineId: json['pipeline_id'] as String?,
       rlhfPending: json['rlhf_pending'] as bool? ?? false,
       verdict: json['verdict'] as String?,

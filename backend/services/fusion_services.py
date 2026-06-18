@@ -34,7 +34,7 @@ def fuse_prompt(prompt: str):
     # 3️⃣ Domain-adaptive calibration
     # --------------------------------------------------
     if semantic_domain == "roleplay_jailbreak":
-        final_risk = max(bert_risk * 0.8, 0.35)
+        final_risk = max(bert_risk * 0.65, 0.35)
 
     elif semantic_domain == "direct_injection":
         final_risk = max(bert_risk * 1.2, 0.50)
@@ -43,7 +43,13 @@ def fuse_prompt(prompt: str):
         final_risk = max(bert_risk * 1.3, 0.55)
 
     elif semantic_domain == "virtualization_hypotheticals":
-        final_risk = bert_risk * 0.6
+        final_risk = bert_risk * 0.45
+
+    elif semantic_domain == "social_engineering":
+        final_risk = bert_risk * 0.55
+
+    elif semantic_domain == "educational_security":
+        final_risk = bert_risk * 0.30
 
     # --------------------------------------------------
     # 4️⃣ Final decision

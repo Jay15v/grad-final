@@ -14,42 +14,82 @@ import 'screens/parent_home_screen.dart';
 import 'widgets/app_colors.dart';
 import 'widgets/auth_widgets.dart';
 import 'services/location_service.dart';
+import 'providers/app_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // Enable offline persistence so cached Firestore data survives network drops.
   FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
   runApp(const ProviderScope(child: AegisMindApp()));
 }
 
-class AegisMindApp extends StatelessWidget {
+// ─── Root app ─────────────────────────────────────────────────────────────────
+
+class AegisMindApp extends ConsumerWidget {
   const AegisMindApp({super.key});
 
+  static ThemeData _buildTheme(AppTheme colors, Brightness brightness) {
+    final base = brightness == Brightness.dark
+        ? ThemeData.dark()
+        : ThemeData.light();
+    return ThemeData(
+      brightness: brightness,
+      scaffoldBackgroundColor: colors.bg,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.accent,
+        brightness: brightness,
+        surface: colors.bgSurface,
+      ).copyWith(primary: AppColors.accent),
+      textTheme: GoogleFonts.interTextTheme(base.textTheme),
+      dividerColor: colors.border.withValues(alpha: 0.4),
+      extensions: [colors],
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'AegisMind',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.bg,
-        colorScheme: ColorScheme.dark(
-          primary: AppColors.accent,
-          surface: AppColors.bgSurface,
-        ),
-        textTheme: GoogleFonts.interTextTheme(
-          ThemeData.dark().textTheme,
-        ),
-        dividerColor: AppColors.border.withValues(alpha: 0.4),
-      ),
+      themeMode: themeMode,
+      theme:     _buildTheme(AppTheme.light, Brightness.light),
+      darkTheme: _buildTheme(AppTheme.dark,  Brightness.dark),
       home: const AuthGate(),
     );
   }
 }
 
+// ─── Theme toggle button (reusable across all screens) ───────────────────────
+
+class ThemeToggleButton extends ConsumerWidget {
+  const ThemeToggleButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t      = AppTheme.of(context);
+    final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
+    return GestureDetector(
+      onTap: () => ref.read(themeModeProvider.notifier).state =
+          isDark ? ThemeMode.light : ThemeMode.dark,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: t.surface.withValues(alpha: 0.6),
+          border: Border.all(color: t.border.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          size: 16,
+          color: t.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Auth Gate ───────────────────────────────────────────────────────────────
-// Listens to Firebase auth state and routes to Login or the role-based screen.
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -72,7 +112,6 @@ class AuthGate extends StatelessWidget {
 }
 
 // ─── Role Router ─────────────────────────────────────────────────────────────
-// Reads the user's Firestore role and navigates to the correct screen.
 
 class _RoleRouter extends StatefulWidget {
   final String uid;
@@ -84,6 +123,7 @@ class _RoleRouter extends StatefulWidget {
 
 class _RoleRouterState extends State<_RoleRouter> {
   late Future<UserModel?> _future;
+  bool _signingOut = false;
 
   @override
   void initState() {
@@ -92,7 +132,6 @@ class _RoleRouterState extends State<_RoleRouter> {
   }
 
   Future<UserModel?> _loadUser() async {
-    // Try network first; fall back to local cache if offline.
     DocumentSnapshot<Map<String, dynamic>> doc;
     try {
       doc = await FirebaseFirestore.instance
@@ -101,7 +140,6 @@ class _RoleRouterState extends State<_RoleRouter> {
           .get(const GetOptions(source: Source.serverAndCache))
           .timeout(const Duration(seconds: 15));
     } catch (_) {
-      // Network unavailable — serve from local cache instead of crashing.
       doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
@@ -131,7 +169,6 @@ class _RoleRouterState extends State<_RoleRouter> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
         }
-
         if (snapshot.hasError) {
           return _ErrorScreen(
             message: 'Could not load profile:\n${snapshot.error}',
@@ -139,24 +176,21 @@ class _RoleRouterState extends State<_RoleRouter> {
             onSignOut: () => FirebaseAuth.instance.signOut(),
           );
         }
-
         final user = snapshot.data;
         if (user == null) {
-          // No Firestore record — sign out after frame
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => FirebaseAuth.instance.signOut(),
-          );
+          if (!_signingOut) {
+            _signingOut = true;
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => FirebaseAuth.instance.signOut(),
+            );
+          }
           return const _SplashScreen();
         }
-
         switch (user.role) {
-          case 'admin':
-            return const AdminDashboard();
-          case 'parent':
-            return const ParentHomeScreen();
+          case 'admin':  return const AdminDashboard();
+          case 'parent': return const ParentHomeScreen();
           case 'child':
-          default:
-            return const HomeShell();
+          default:       return const HomeShell();
         }
       },
     );
@@ -176,8 +210,9 @@ class _ErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -189,7 +224,7 @@ class _ErrorScreen extends StatelessWidget {
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: t.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -202,7 +237,7 @@ class _ErrorScreen extends StatelessWidget {
               TextButton(
                 onPressed: onSignOut,
                 child: Text('Sign out',
-                    style: TextStyle(color: AppColors.textMuted)),
+                    style: TextStyle(color: t.textMuted)),
               ),
             ],
           ),
@@ -251,10 +286,11 @@ class _SplashScreenState extends State<_SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Container(
-        decoration: BoxDecoration(gradient: AppColors.bgGradient),
+        decoration: BoxDecoration(gradient: t.bgGradient),
         child: Center(
           child: FadeTransition(
             opacity: _fade,
@@ -265,10 +301,10 @@ class _SplashScreenState extends State<_SplashScreen>
                 children: [
                   const ShieldLogo(size: 80, iconSize: 40, radius: 22),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'AegisMind',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: t.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 26,
                       letterSpacing: 0.5,
@@ -325,10 +361,11 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: t.bg,
       body: Container(
-        decoration: BoxDecoration(gradient: AppColors.bgGradient),
+        decoration: BoxDecoration(gradient: t.bgGradient),
         child: Column(
           children: [
             _AppBar(
@@ -358,151 +395,139 @@ class _AppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return SafeArea(
       bottom: false,
       child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.bgSurface.withValues(alpha: 0.95),
-        border: Border(
-          bottom: BorderSide(color: AppColors.accent.withValues(alpha: 0.1)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: t.bgSurface.withValues(alpha: 0.95),
+          border: Border(
+            bottom: BorderSide(color: AppColors.accent.withValues(alpha: 0.1)),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          // Logo
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              gradient: AppColors.accentGradient,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accent.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Text('A',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text('AegisMind',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15)),
-          const Spacer(),
-          // Safe Mode badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.childAccent.withValues(alpha: 0.12),
-              border: Border.all(color: AppColors.childAccent.withValues(alpha: 0.4)),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.verified_user_outlined, size: 11, color: AppColors.childAccent),
-                const SizedBox(width: 4),
-                Text(
-                  'Safe Mode Active',
-                  style: TextStyle(
-                    color: AppColors.childAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+        child: Row(
+          children: [
+            // Logo
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                gradient: AppColors.accentGradient,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Mode toggle — icons only to save space on mobile
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.6),
-              border:
-                  Border.all(color: AppColors.border.withValues(alpha: 0.4)),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _TabButton(
-                  label: 'Chat',
-                  icon: Icons.chat_bubble_outline,
-                  selected: selectedIndex == 0,
-                  onTap: () => onTabChanged(0),
-                ),
-                const SizedBox(width: 2),
-                _TabButton(
-                  label: 'Analyze',
-                  icon: Icons.manage_search_outlined,
-                  selected: selectedIndex == 1,
-                  onTap: () => onTabChanged(1),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Logout button
-          Tooltip(
-            message: 'Sign out',
-            child: GestureDetector(
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppColors.bgSurface,
-                    title: const Text('Sign out',
-                        style: TextStyle(color: Colors.white, fontSize: 15)),
-                    content: Text('Are you sure you want to sign out?',
-                        style: TextStyle(
-                            color: AppColors.textSecondary, fontSize: 13)),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text('Cancel',
-                            style: TextStyle(color: AppColors.textMuted)),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text('Sign out',
-                            style: TextStyle(color: AppColors.danger)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await FirebaseAuth.instance.signOut();
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.surface.withValues(alpha: 0.6),
-                  border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.4)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.logout,
-                    size: 16, color: AppColors.textMuted),
+                ],
+              ),
+              child: const Center(
+                child: Text('A',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16)),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Text('AegisMind',
+                style: TextStyle(
+                    color: t.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15)),
+            const Spacer(),
+            // Safe Mode icon badge
+            Tooltip(
+              message: 'Safe Mode Active',
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.childAccent.withValues(alpha: 0.12),
+                  border: Border.all(color: AppColors.childAccent.withValues(alpha: 0.4)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.verified_user_outlined, size: 14, color: AppColors.childAccent),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // Tab switcher
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: t.surface.withValues(alpha: 0.6),
+                border: Border.all(color: t.border.withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _TabButton(
+                    label: 'Chat',
+                    icon: Icons.chat_bubble_outline,
+                    selected: selectedIndex == 0,
+                    onTap: () => onTabChanged(0),
+                  ),
+                  const SizedBox(width: 2),
+                  _TabButton(
+                    label: 'Analyze',
+                    icon: Icons.manage_search_outlined,
+                    selected: selectedIndex == 1,
+                    onTap: () => onTabChanged(1),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            const ThemeToggleButton(),
+            const SizedBox(width: 6),
+            // Logout button
+            Tooltip(
+              message: 'Sign out',
+              child: GestureDetector(
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: t.bgSurface,
+                      title: Text('Sign out',
+                          style: TextStyle(color: t.textPrimary, fontSize: 15)),
+                      content: Text('Are you sure you want to sign out?',
+                          style: TextStyle(color: t.textSecondary, fontSize: 13)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text('Cancel',
+                              style: TextStyle(color: t.textMuted)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text('Sign out',
+                              style: TextStyle(color: AppColors.danger)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await FirebaseAuth.instance.signOut();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: t.surface.withValues(alpha: 0.6),
+                    border: Border.all(color: t.border.withValues(alpha: 0.4)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.logout, size: 16, color: t.textMuted),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),  // Container
-    );  // SafeArea
+    );
   }
 }
 
@@ -521,6 +546,7 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppTheme.of(context);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -543,7 +569,7 @@ class _TabButton extends StatelessWidget {
           message: label,
           child: Icon(icon,
               size: 16,
-              color: selected ? Colors.white : AppColors.textMuted),
+              color: selected ? Colors.white : t.textMuted),
         ),
       ),
     );

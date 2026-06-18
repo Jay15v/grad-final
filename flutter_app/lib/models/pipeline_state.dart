@@ -1,4 +1,4 @@
-class StageEntry {
+class StageEntry {//represents the state of a single stage in the pipeline
   final String status; // 'running' | 'done'
   final dynamic data;
   final String? error;
