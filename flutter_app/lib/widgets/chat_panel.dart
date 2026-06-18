@@ -110,7 +110,7 @@ class _ChatPanelState extends State<ChatPanel> {
           _messages.add(ChatMessage(
             id: UniqueKey().toString(),
             role: MessageRole.blocked,
-            content: '',
+            content: response.reply ?? '',
             decision: 'BLOCK',
             defenseMeta: response.defenseMeta,
           ));
@@ -327,13 +327,13 @@ class _ChatPanelState extends State<ChatPanel> {
           GestureDetector(
             onTap: () => _rateMessage(msg.id, 'good'),
             child: Icon(Icons.thumb_up_outlined,
-                size: 15, color: AppColors.textMuted),
+                size: 15, color: AppTheme.of(context).textMuted),
           ),
           const SizedBox(width: 10),
           GestureDetector(
             onTap: () => _rateMessage(msg.id, 'bad'),
             child: Icon(Icons.thumb_down_outlined,
-                size: 15, color: AppColors.textMuted),
+                size: 15, color: AppTheme.of(context).textMuted),
           ),
         ],
       ),
@@ -353,7 +353,7 @@ class _ChatPanelState extends State<ChatPanel> {
           decoration: BoxDecoration(
             border: Border(
                 bottom:
-                    BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+                    BorderSide(color: AppTheme.of(context).border.withValues(alpha: 0.5))),
           ),
           child: Row(
             children: [
@@ -379,7 +379,7 @@ class _ChatPanelState extends State<ChatPanel> {
               const Spacer(),
               Text('phi3 · defense-gated',
                   style: TextStyle(
-                      fontSize: 11, color: AppColors.textMuted)),
+                      fontSize: 11, color: AppTheme.of(context).textMuted)),
             ],
           ),
         ),
@@ -435,7 +435,7 @@ class _ChatPanelState extends State<ChatPanel> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             border: Border(
-                top: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+                top: BorderSide(color: AppTheme.of(context).border.withValues(alpha: 0.5))),
           ),
           child: Column(
             children: [
@@ -448,25 +448,25 @@ class _ChatPanelState extends State<ChatPanel> {
                       maxLines: 3,
                       minLines: 1,
                       enabled: !_isSending && !_voiceBusy,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 13),
+                      style: TextStyle(
+                          color: AppTheme.of(context).textPrimary, fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
                         hintStyle: TextStyle(
-                            color: AppColors.textMuted, fontSize: 13),
+                            color: AppTheme.of(context).textMuted, fontSize: 13),
                         filled: true,
-                        fillColor: AppColors.surface.withValues(alpha: 0.7),
+                        fillColor: AppTheme.of(context).surface.withValues(alpha: 0.7),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                              color: AppTheme.of(context).border.withValues(alpha: 0.5)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.5)),
+                              color: AppTheme.of(context).border.withValues(alpha: 0.5)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -476,7 +476,7 @@ class _ChatPanelState extends State<ChatPanel> {
                         disabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                              color: AppColors.border.withValues(alpha: 0.2)),
+                              color: AppTheme.of(context).border.withValues(alpha: 0.2)),
                         ),
                       ),
                       onSubmitted: (_) => _send(),
@@ -497,12 +497,12 @@ class _ChatPanelState extends State<ChatPanel> {
                         decoration: BoxDecoration(
                           color: _isRecording
                               ? Colors.red.withValues(alpha: 0.8)
-                              : AppColors.surface.withValues(alpha: 0.6),
+                              : AppTheme.of(context).surface.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _isRecording
                                 ? Colors.red.withValues(alpha: 0.5)
-                                : AppColors.border.withValues(alpha: 0.5),
+                                : AppTheme.of(context).border.withValues(alpha: 0.5),
                           ),
                         ),
                         child: _isTranscribing
@@ -519,7 +519,7 @@ class _ChatPanelState extends State<ChatPanel> {
                                 _isRecording ? Icons.mic : Icons.mic_none,
                                 color: _isRecording
                                     ? Colors.white
-                                    : AppColors.textMuted,
+                                    : AppTheme.of(context).textMuted,
                                 size: 20,
                               ),
                       ),
@@ -539,7 +539,7 @@ class _ChatPanelState extends State<ChatPanel> {
                               ? null
                               : AppColors.accentGradient,
                           color: (_isSending || _voiceBusy)
-                              ? AppColors.border.withValues(alpha: 0.3)
+                              ? AppTheme.of(context).border.withValues(alpha: 0.3)
                               : null,
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: (_isSending || _voiceBusy)
@@ -572,7 +572,7 @@ class _ChatPanelState extends State<ChatPanel> {
               Text(
                 'Enter to send  ·  Every message is defense-checked before response',
                 style: TextStyle(
-                    fontSize: 10, color: AppColors.textMuted),
+                    fontSize: 10, color: AppTheme.of(context).textMuted),
                 textAlign: TextAlign.center,
               ),
             ],

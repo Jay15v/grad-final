@@ -132,7 +132,9 @@ class _BlockedBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'This message was blocked by the defense pipeline.',
+                  message.content.isNotEmpty
+                      ? message.content
+                      : 'This message was blocked by the defense pipeline.',
                   style: TextStyle(
                       color: AppColors.dangerLight,
                       fontSize: 13,
